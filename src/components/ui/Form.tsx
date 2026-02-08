@@ -4,7 +4,7 @@ import { ChevronDown } from "lucide-react";
 // Wrapper untuk Form Container agar senada dengan Table
 export function FormCard({ children, title, description, className = "" }: { children: ReactNode; title?: string; description?: string; className?: string }) {
     return (
-        <div className={`bg-slate-900/50 backdrop-blur-sm rounded-xl shadow-xl border border-slate-800 overflow-hidden ${className}`}>
+        <div className={`bg-slate-800 backdrop-blur-sm rounded-xl shadow-xl border border-slate-800 overflow-hidden ${className}`}>
             {(title || description) && (
                 <div className="p-6 border-b border-slate-800/50">
                     {title && <h3 className="text-lg font-bold text-slate-100">{title}</h3>}
@@ -33,8 +33,8 @@ export function Label({ children, className = "", required = false, ...props }: 
 
 // Base styles for inputs
 const inputBaseStyles = `
-    w-full bg-slate-950 border rounded-lg px-4 text-slate-200 
-    placeholder-slate-600 focus:outline-none focus:ring-2 transition-all
+    w-full bg-gray-900 border rounded-lg px-4 text-slate-200 
+    placeholder-slate-700 focus:outline-none focus:ring-2 transition-all
     disabled:opacity-50 disabled:cursor-not-allowed
     scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent
 `;

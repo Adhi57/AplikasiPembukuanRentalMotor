@@ -1,17 +1,13 @@
 import { useEffect, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import MotorCard from "./MotorCard"
-import { getMotor } from "@/services/motor.service"
+import { getMotor, deleteMotor } from "@/services/motor.service"
 import { Motor } from "@/types/motor.type"
 import Button from "@/components/ui/Button"
-import Modal from "@/components/ui/Modal"
-import MotorForm from "./MotorForm"
-import MotorFormEdit from "./MotorFormEdit"
 import { Plus } from "lucide-react"
 
 export default function MotorList() {
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const [selectedMotor, setSelectedMotor] = useState<Motor | null>(null)
+  const navigate = useNavigate()
   const [motors, setMotors] = useState<Motor[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -21,6 +17,7 @@ export default function MotorList() {
 
   const fetchMotor = async () => {
     try {
+      setLoading(true)
       const data = await getMotor()
       setMotors(data)
     } catch (err) {
@@ -31,81 +28,63 @@ export default function MotorList() {
   }
 
   const handleEdit = (motor: Motor) => {
-    setSelectedMotor(motor)
-    setIsEditModalOpen(true)
+    navigate(`/motor/edit/${motor.motor_id}`)
   }
 
-  const handleCloseEditModal = () => {
-    setIsEditModalOpen(false)
-    setSelectedMotor(null)
+  const handleDelete = async (motor: Motor) => {
+    if (confirm(`Apakah Anda yakin ingin menghapus motor ${motor.nama}?`)) {
+      try {
+        await deleteMotor(motor.motor_id)
+        fetchMotor()
+      } catch (err) {
+        console.error("Gagal hapus motor", err)
+        alert("Gagal menghapus motor")
+      }
+    }
   }
 
   if (loading) {
-    return <p className="text-gray-400">Loading...</p>
+    return (
+      <div className="flex items-center justify-center p-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        <p className="ml-3 text-slate-400">Memuat data motor...</p>
+      </div>
+    )
   }
 
   return (
-    <div>
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-gray-200">
-          Data Motor
-        </h1>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-100 italic tracking-tight">Katalog <span className="text-blue-500">Motor</span></h1>
+          <p className="text-sm text-slate-400">Total {motors.length} armada tersedia</p>
+        </div>
 
         <Button
           label="Tambah Motor"
           icon={<Plus size={16} />}
-          onClick={() => setIsAddModalOpen(true)}
+          href="/motor/tambah"
         />
       </div>
 
       {/* List */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {motors.length === 0 ? (
-          <p className="text-gray-400">Belum ada data motor</p>
+          <div className="col-span-full p-12 text-center bg-slate-800/50 rounded-xl border border-dashed border-slate-700">
+            <p className="text-slate-400">Belum ada data motor yang terdaftar.</p>
+          </div>
         ) : (
           motors.map((motor) => (
-            <MotorCard 
-              key={motor.motor_id} 
+            <MotorCard
+              key={motor.motor_id}
               motor={motor}
               onEdit={handleEdit}
+              onDelete={() => handleDelete(motor)}
             />
           ))
         )}
       </div>
-
-      {/* Modal Tambah Motor */}
-      <Modal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        title="Tambah Motor"
-      >
-        <MotorForm
-          onCancel={() => setIsAddModalOpen(false)}
-          onSuccess={() => {
-            setIsAddModalOpen(false)
-            fetchMotor()
-          }}
-        />
-      </Modal>
-
-      {/* Modal Edit Motor */}
-      <Modal
-        isOpen={isEditModalOpen}
-        onClose={handleCloseEditModal}
-        title="Edit Motor"
-      >
-        {selectedMotor && (
-          <MotorFormEdit
-            motor={selectedMotor}
-            onCancel={handleCloseEditModal}
-            onSuccess={() => {
-              handleCloseEditModal()
-              fetchMotor()
-            }}
-          />
-        )}
-      </Modal>
     </div>
   )
 }

@@ -22,6 +22,8 @@ const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, is
         register,
         handleSubmit,
         reset,
+        watch,
+        setValue,
         formState: { errors },
     } = useForm<TransaksiFormData>({
         defaultValues: initialData || {
@@ -38,6 +40,24 @@ const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, is
             reset(initialData);
         }
     }, [initialData, reset]);
+
+    const motorId = watch('motor_id');
+    const tanggalSewa = watch('tanggal_sewa');
+    const tanggalKembaliRencana = watch('tanggal_kembali_rencana');
+
+    useEffect(() => {
+        if (motorId && tanggalSewa && tanggalKembaliRencana) {
+            const start = new Date(tanggalSewa);
+            const end = new Date(tanggalKembaliRencana);
+            const diffTime = Math.abs(end.getTime() - start.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1; // Minimal 1 hari
+
+            const motor = motors.find(m => m.motor_id === motorId);
+            if (motor) {
+                setValue('total_bayar', diffDays * motor.harga_harian);
+            }
+        }
+    }, [motorId, tanggalSewa, tanggalKembaliRencana, motors, setValue]);
 
     return (
         <FormCard

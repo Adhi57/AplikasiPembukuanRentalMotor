@@ -1,6 +1,18 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
+pub struct Motor {
+    pub motor_id: i32,
+    pub nama: String,
+    pub plat: String,
+    pub tipe_motor: String,
+    pub tahun: String,
+    pub harga_harian: i32,
+    pub foto: String,
+    pub status: String,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct Penyewa {
     pub penyewa_id: i32,
     pub nama: String,

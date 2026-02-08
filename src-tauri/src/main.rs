@@ -12,11 +12,12 @@ fn main() {
 
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
-            commands::get_motor,
-            commands::add_motor,
-            commands::update_motor,
-            commands::delete_motor,
-            commands::save_motor_image,
+            handlers::motor::get_all_motor,
+            handlers::motor::create_motor,
+            handlers::motor::update_motor,
+            handlers::motor::delete_motor,
+            handlers::motor::get_motor_by_id,
+            handlers::motor::save_motor_image,
             handlers::penyewa::get_all_penyewa,
             handlers::penyewa::create_penyewa,
             handlers::penyewa::get_penyewa_by_id,

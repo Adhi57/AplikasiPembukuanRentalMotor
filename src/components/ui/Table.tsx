@@ -1,5 +1,4 @@
 import { ReactNode } from "react"
-import { Loader2, PackageOpen } from "lucide-react"
 
 interface Column<T> {
   header: string

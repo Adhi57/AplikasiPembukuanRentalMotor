@@ -61,6 +61,71 @@ pub fn get_connection() -> Result<Connection> {
     Ok(conn)
 }
 
+pub fn get_all_motor(conn: &Connection) -> Result<Vec<crate::models::Motor>> {
+    let mut stmt = conn.prepare(
+        "SELECT motor_id, nama, plat, tipe_motor, tahun, harga_harian, foto, status FROM motor",
+    )?;
+    let motor_iter = stmt.query_map([], |row| {
+        Ok(crate::models::Motor {
+            motor_id: row.get(0)?,
+            nama: row.get(1)?,
+            plat: row.get(2)?,
+            tipe_motor: row.get(3)?,
+            tahun: row.get(4)?,
+            harga_harian: row.get(5)?,
+            foto: row.get(6)?,
+            status: row.get(7)?,
+        })
+    })?;
+
+    let mut result = Vec::new();
+    for m in motor_iter {
+        result.push(m?);
+    }
+    Ok(result)
+}
+
+pub fn create_motor(conn: &Connection, data: crate::models::Motor) -> Result<()> {
+    conn.execute(
+        "INSERT INTO motor (nama, plat, tipe_motor, tahun, harga_harian, foto, status) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        (data.nama, data.plat, data.tipe_motor, data.tahun, data.harga_harian, data.foto, data.status),
+    )?;
+    Ok(())
+}
+
+pub fn get_motor_by_id(conn: &Connection, id: i32) -> Result<crate::models::Motor> {
+    let mut stmt = conn.prepare("SELECT motor_id, nama, plat, tipe_motor, tahun, harga_harian, foto, status FROM motor WHERE motor_id = ?1")?;
+    let mut rows = stmt.query([id])?;
+
+    if let Some(row) = rows.next()? {
+        Ok(crate::models::Motor {
+            motor_id: row.get(0)?,
+            nama: row.get(1)?,
+            plat: row.get(2)?,
+            tipe_motor: row.get(3)?,
+            tahun: row.get(4)?,
+            harga_harian: row.get(5)?,
+            foto: row.get(6)?,
+            status: row.get(7)?,
+        })
+    } else {
+        Err(rusqlite::Error::QueryReturnedNoRows)
+    }
+}
+
+pub fn update_motor(conn: &Connection, id: i32, data: crate::models::Motor) -> Result<()> {
+    conn.execute(
+        "UPDATE motor SET nama = ?1, plat = ?2, tipe_motor = ?3, tahun = ?4, harga_harian = ?5, foto = ?6, status = ?7 WHERE motor_id = ?8",
+        (data.nama, data.plat, data.tipe_motor, data.tahun, data.harga_harian, data.foto, data.status, id),
+    )?;
+    Ok(())
+}
+
+pub fn delete_motor(conn: &Connection, id: i32) -> Result<()> {
+    conn.execute("DELETE FROM motor WHERE motor_id = ?1", (id,))?;
+    Ok(())
+}
+
 pub fn get_all_penyewa(conn: &Connection) -> Result<Vec<crate::models::Penyewa>> {
     let mut stmt = conn.prepare("SELECT penyewa_id, nama, no_hp, no_ktp, alamat FROM penyewa")?;
     let penyewa_iter = stmt.query_map([], |row| {
@@ -145,10 +210,19 @@ pub fn get_all_transaksi(conn: &Connection) -> Result<Vec<crate::models::Transak
 }
 
 pub fn create_transaksi(conn: &Connection, data: crate::models::Transaksi) -> Result<()> {
+    let motor_id = data.motor_id;
+
     conn.execute(
         "INSERT INTO transaksi (motor_id, penyewa_id, tanggal_sewa, tanggal_kembali_rencana, tanggal_kembali_aktual, hari_terlambat, total_bayar, status, denda) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         (data.motor_id, data.penyewa_id, data.tanggal_sewa, data.tanggal_kembali_rencana, data.tanggal_kembali_aktual, data.hari_terlambat, data.total_bayar, data.status, data.denda),
     )?;
+
+    // Update motor status to dipinjam
+    conn.execute(
+        "UPDATE motor SET status = 'dipinjam' WHERE motor_id = ?1",
+        (motor_id,),
+    )?;
+
     Ok(())
 }
 
@@ -175,11 +249,44 @@ pub fn get_transaksi_by_id(conn: &Connection, id: i32) -> Result<crate::models::
 }
 
 pub fn update_transaksi(conn: &Connection, id: i32, data: crate::models::Transaksi) -> Result<()> {
+    // Get old motor_id before updating
+    let old_transaksi = get_transaksi_by_id(conn, id)?;
+    let old_motor_id = old_transaksi.motor_id;
+
+    // Extract values we need after the move
+    let new_motor_id = data.motor_id;
+    let is_kembali = data.status == "kembali";
+
     conn.execute("UPDATE transaksi SET motor_id = ?1, penyewa_id = ?2, tanggal_sewa = ?3, tanggal_kembali_rencana = ?4, tanggal_kembali_aktual = ?5, hari_terlambat = ?6, total_bayar = ?7, status = ?8, denda = ?9 WHERE transaksi_id = ?10", (data.motor_id, data.penyewa_id, data.tanggal_sewa, data.tanggal_kembali_rencana, data.tanggal_kembali_aktual, data.hari_terlambat, data.total_bayar, data.status, data.denda, id))?;
+
+    // If motor changed, reset old motor status
+    if old_motor_id != new_motor_id {
+        conn.execute(
+            "UPDATE motor SET status = 'tersedia' WHERE motor_id = ?1",
+            (old_motor_id,),
+        )?;
+    }
+
+    // Update current motor status based on transaction status
+    let motor_status = if is_kembali { "tersedia" } else { "dipinjam" };
+
+    conn.execute(
+        "UPDATE motor SET status = ?1 WHERE motor_id = ?2",
+        (motor_status, new_motor_id),
+    )?;
+
     Ok(())
 }
 
 pub fn delete_transaksi(conn: &Connection, id: i32) -> Result<()> {
+    // Get motor_id before deleting transaction
+    if let Ok(transaksi) = get_transaksi_by_id(conn, id) {
+        conn.execute(
+            "UPDATE motor SET status = 'tersedia' WHERE motor_id = ?1",
+            (transaksi.motor_id,),
+        )?;
+    }
+
     conn.execute("DELETE FROM transaksi WHERE transaksi_id = ?1", (id,))?;
     Ok(())
 }

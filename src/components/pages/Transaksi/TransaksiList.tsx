@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Plus, Search } from "lucide-react";
 
 import { Transaksi } from "../../../types/transaksi.type";
-import { Motor } from "../../../types/motor.type";
+import { Motor } from "@/types/motor.type";
 import { Penyewa } from "../../../types/penyewa.type";
 import { getMotor } from "../../../services/motor.service";
 import { PenyewaService } from "../../../services/penyewa.service";

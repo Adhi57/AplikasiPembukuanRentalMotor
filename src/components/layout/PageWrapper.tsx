@@ -6,7 +6,7 @@ interface PageWrapperProps {
   children: ReactNode
 }
 
-export default function PageWrapper({ children }: Props) {
+export default function PageWrapper({ children }: PageWrapperProps) {
   return (
     <div className="min-h-screen">
       <Sidebar />

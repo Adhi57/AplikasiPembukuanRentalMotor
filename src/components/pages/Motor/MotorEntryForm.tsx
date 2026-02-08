@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { invoke } from '@tauri-apps/api/core';
+import { MotorFormData } from '@/types/motor.type';
 import { FormCard, FormGroup, Label, Input } from '@/components/ui/Form';
 import Button from '@/components/ui/Button';
 import { Save, Upload } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
-import { MotorFormData } from '@/types/motor.type';
 
 interface MotorFormProps {
   initialData?: MotorFormData;
@@ -12,7 +12,7 @@ interface MotorFormProps {
   isLoading?: boolean;
 }
 
-const MotorForm: React.FC<MotorFormProps> = ({ initialData, onSubmit, isLoading }) => {
+const MotorEntryForm: React.FC<MotorFormProps> = ({ initialData, onSubmit, isLoading }) => {
   const [preview, setPreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
 
@@ -179,4 +179,4 @@ const MotorForm: React.FC<MotorFormProps> = ({ initialData, onSubmit, isLoading 
   );
 };
 
-export default MotorForm;
+export default MotorEntryForm;
