@@ -1,6 +1,6 @@
 import { ComponentProps, ReactNode } from "react"
 import { Loader2 } from "lucide-react"
-import { Link } from "react-router-dom"
+import { Link, LinkProps } from "react-router-dom"
 
 type BaseButtonProps = ComponentProps<"button"> & {
   label: string
@@ -10,7 +10,7 @@ type BaseButtonProps = ComponentProps<"button"> & {
   variant?: "primary" | "secondary" | "danger"
 }
 
-type LinkButtonProps = {
+type LinkButtonProps = Omit<LinkProps, "to"> & {
   label: string
   href: string
   icon?: ReactNode
@@ -43,7 +43,7 @@ export default function Button({
 
   if (href) {
     return (
-      <Link to={href} className={classes}>
+      <Link to={href} className={classes} {...(props as Omit<LinkProps, "to">)}>
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : icon}
         <span>{label}</span>
       </Link>

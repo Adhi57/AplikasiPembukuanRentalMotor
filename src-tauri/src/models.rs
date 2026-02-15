@@ -34,3 +34,13 @@ pub struct Transaksi {
     pub status: String,
     pub denda: Option<i64>,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct BuktiPelunasan {
+    pub bukti_id: i32,
+    pub transaksi_id: i32,
+    pub tanggal_bayar: String,
+    pub jumlah_bayar: i64,
+    pub metode_bayar: String,
+    pub foto_bukti: String,
+}

@@ -1,3 +1,4 @@
+pub mod bukti_pelunasan;
 pub mod motor;
 pub mod pembukuan;
 pub mod pengaturan;

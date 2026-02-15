@@ -44,6 +44,11 @@ const menuGroups: MenuGroup[] = [
         path: "/transaksi",
         icon: <Receipt size={18} />,
       },
+      {
+        name: "Bukti Pelunasan",
+        path: "/bukti_Pelunasan",
+        icon: <Wallet size={18} />,
+      },
     ],
   },
   {
@@ -78,7 +83,7 @@ export default function Sidebar() {
     <aside className="fixed left-0 top-0 h-screen w-64 border-r-2 border-zinc-600 text-slate-100 shadow-xl">
       {/* Logo */}
       <div className="h-16 flex items-center gap-2 px-6 text-lg font-bold">
-          Aplikasi Rental Motor
+        Aplikasi Rental Motor
       </div>
 
       <nav className="p-4 space-y-4">
@@ -87,10 +92,9 @@ export default function Sidebar() {
           to="/"
           className={({ isActive }) =>
             `flex items-center my-7 gap-3 px-4 py-3 rounded-md text-sm font-medium transition
-            ${
-              isActive
-                ? "bg-blue-600 text-white"
-                : "text-slate-300 hover:bg-slate-800 hover:text-white"
+            ${isActive
+              ? "bg-blue-600 text-white"
+              : "text-slate-300 hover:bg-slate-800 hover:text-white"
             }`
           }
         >
@@ -112,15 +116,14 @@ export default function Sidebar() {
                   to={item.path}
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium transition
-                    ${
-                      isActive
-                        ? "bg-blue-600 text-white"
-                        : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                    ${isActive
+                      ? "bg-blue-600 text-white"
+                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
                     }`
                   }
                 >
                   <div className=" border border-indigo-900 rounded-md p-2 border-spacing-4">
-                  {item.icon}
+                    {item.icon}
                   </div>
                   {item.name}
                 </NavLink>

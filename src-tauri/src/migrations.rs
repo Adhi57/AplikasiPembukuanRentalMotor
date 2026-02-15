@@ -1,5 +1,5 @@
-use rusqlite::Result;
 use crate::db::get_connection;
+use rusqlite::Result;
 
 pub fn init_db() -> Result<()> {
     let conn = get_connection()?;
@@ -62,7 +62,16 @@ pub fn init_db() -> Result<()> {
             value TEXT NOT NULL,
             keterangan TEXT
         );
-        "
+
+        CREATE TABLE IF NOT EXISTS bukti_pelunasan (
+            bukti_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            transaksi_id INTEGER,
+            tanggal_bayar TEXT,
+            jumlah_bayar INTEGER,
+            metode_bayar TEXT,
+            foto_bukti TEXT
+        );
+        ",
     )?;
 
     Ok(())

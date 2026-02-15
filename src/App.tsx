@@ -12,6 +12,10 @@ import PenyewaEdit from "./components/pages/Penyewa/PenyewaEdit";
 import TransaksiList from "./components/pages/Transaksi/TransaksiList";
 import TransaksiAdd from "./components/pages/Transaksi/TransaksiAdd";
 import TransaksiEdit from "@/components/pages/Transaksi/TransaksiEdit";
+import BuktiPelunasanList from "./components/pages/BuktiPelunasan/BuktiPelunasanList";
+import BuktiPelunasanAdd from "./components/pages/BuktiPelunasan/BuktiPelunasanAdd";
+import BuktiPelunasanEdit from "./components/pages/BuktiPelunasan/BuktiPelunasanEdit";
+import BuktiPelunasanLihat from "./components/pages/BuktiPelunasan/BuktiPelunasanLihat";
 
 export default function App() {
   return (
@@ -28,6 +32,10 @@ export default function App() {
           <Route path="/transaksi" element={<TransaksiList />} />
           <Route path="/transaksi/tambah" element={<TransaksiAdd />} />
           <Route path="/transaksi/edit/:id" element={<TransaksiEdit />} />
+          <Route path="/bukti_pelunasan" element={<BuktiPelunasanList />} />
+          <Route path="/bukti_pelunasan/tambah" element={<BuktiPelunasanAdd />} />
+          <Route path="/bukti_pelunasan/edit/:id" element={<BuktiPelunasanEdit />} />
+          <Route path="/bukti_pelunasan/lihat/:id" element={<BuktiPelunasanLihat />} />
         </Routes>
       </PageWrapper>
     </BrowserRouter>

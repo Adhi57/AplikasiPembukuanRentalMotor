@@ -156,12 +156,11 @@ export default function TransaksiList() {
                         href={`/transaksi/edit/${row.transaksi_id}`}
                         className="px-2 py-1 text-xs rounded hover:bg-blue-900 text-blue-300 border border-blue-800"
                     />
-                    <button
+                    <Button
+                        label="Hapus"
                         onClick={() => handleDelete(row.transaksi_id)}
-                        className="px-2 py-1 text-xs rounded hover:bg-red-900 text-red-300 border border-red-800"
-                    >
-                        Hapus
-                    </button>
+                        className="bg-red-800 px-2 py-1 text-xs rounded hover:bg-red-900 text-red-300 border border-red-800"
+                    />
                 </div>
             ),
         },

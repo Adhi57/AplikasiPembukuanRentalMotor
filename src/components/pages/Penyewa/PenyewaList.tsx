@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
 import { Phone, CreditCard, MapPin, Plus, Search } from "lucide-react";
 import Table from "../../ui/Table";
 import Button from "../../ui/Button";
@@ -97,20 +96,18 @@ export default function PenyewaList() {
       width: "80px",
       render: (_value: any, row: Penyewa) => (
         <div className="flex justify-center gap-2">
-          <Link
-            to={`/penyewa/edit/${row.penyewa_id}`}
-            className="p-2 hover:bg-blue-50 border border-transparent hover:border-blue-100 rounded-lg transition text-slate-200 hover:text-blue-600"
+          <Button
+            label="Edit"
+            href={`/penyewa/edit/${row.penyewa_id}`}
+            className="px-2 py-1 text-xs rounded hover:bg-blue-900 text-blue-300 border border-blue-800"
             title="Edit"
-          >
-            <span>Edit</span>
-          </Link>
-          <button
+          />
+          <Button
+            label="Hapus"
             onClick={() => handleDelete(row.penyewa_id)}
-            className="p-2 hover:bg-red-50 border border-transparent hover:border-red-100 rounded-lg transition text-slate-200 hover:text-red-600"
+            className="bg-red-800 px-2 py-1 text-xs rounded hover:bg-red-900 text-red-300 border border-red-800"
             title="Hapus"
-          >
-            <span>Hapus</span>
-          </button>
+          />
         </div>
       ),
     },

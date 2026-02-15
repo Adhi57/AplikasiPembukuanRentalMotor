@@ -290,3 +290,102 @@ pub fn delete_transaksi(conn: &Connection, id: i32) -> Result<()> {
     conn.execute("DELETE FROM transaksi WHERE transaksi_id = ?1", (id,))?;
     Ok(())
 }
+
+pub fn get_all_bukti_pelunasan(conn: &Connection) -> Result<Vec<crate::models::BuktiPelunasan>> {
+    let mut stmt = conn.prepare("SELECT bukti_id, transaksi_id, tanggal_bayar, jumlah_bayar, metode_bayar, foto_bukti FROM bukti_pelunasan")?;
+    let bukti_iter = stmt.query_map([], |row| {
+        Ok(crate::models::BuktiPelunasan {
+            bukti_id: row.get(0)?,
+            transaksi_id: row.get(1)?,
+            tanggal_bayar: row.get(2)?,
+            jumlah_bayar: row.get(3)?,
+            metode_bayar: row.get(4)?,
+            foto_bukti: row.get(5)?,
+        })
+    })?;
+
+    let mut result = Vec::new();
+    for b in bukti_iter {
+        result.push(b?);
+    }
+    Ok(result)
+}
+
+pub fn create_bukti_pelunasan(
+    conn: &Connection,
+    data: crate::models::BuktiPelunasan,
+) -> Result<()> {
+    conn.execute("INSERT INTO bukti_pelunasan (transaksi_id, tanggal_bayar, jumlah_bayar, metode_bayar, foto_bukti) VALUES (?1, ?2, ?3, ?4, ?5)", (data.transaksi_id, data.tanggal_bayar, data.jumlah_bayar, data.metode_bayar, data.foto_bukti))?;
+    Ok(())
+}
+
+pub fn get_bukti_pelunasan_by_id(
+    conn: &Connection,
+    id: i32,
+) -> Result<crate::models::BuktiPelunasan> {
+    let mut stmt = conn.prepare("SELECT bukti_id, transaksi_id, tanggal_bayar, jumlah_bayar, metode_bayar, foto_bukti FROM bukti_pelunasan WHERE bukti_id = ?1")?;
+    let mut rows = stmt.query([id])?;
+
+    if let Some(row) = rows.next()? {
+        Ok(crate::models::BuktiPelunasan {
+            bukti_id: row.get(0)?,
+            transaksi_id: row.get(1)?,
+            tanggal_bayar: row.get(2)?,
+            jumlah_bayar: row.get(3)?,
+            metode_bayar: row.get(4)?,
+            foto_bukti: row.get(5)?,
+        })
+    } else {
+        Err(rusqlite::Error::QueryReturnedNoRows)
+    }
+}
+
+pub fn update_bukti_pelunasan(
+    conn: &Connection,
+    id: i32,
+    data: crate::models::BuktiPelunasan,
+) -> Result<()> {
+    conn.execute("UPDATE bukti_pelunasan SET transaksi_id = ?1, tanggal_bayar = ?2, jumlah_bayar = ?3, metode_bayar = ?4, foto_bukti = ?5 WHERE bukti_id = ?6", (data.transaksi_id, data.tanggal_bayar, data.jumlah_bayar, data.metode_bayar, data.foto_bukti, id))?;
+    Ok(())
+}
+
+pub fn delete_bukti_pelunasan(conn: &Connection, id: i32) -> Result<()> {
+    conn.execute("DELETE FROM bukti_pelunasan WHERE bukti_id = ?1", (id,))?;
+    Ok(())
+}
+
+use base64::prelude::*;
+use uuid::Uuid;
+
+pub fn save_bukti_pelunasan_image(base64_data: String) -> Result<String, String> {
+    let mut path = get_db_path();
+    path.pop(); // Remove rental_motor.sqlite
+    path.push("uploads");
+
+    if !path.exists() {
+        fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    }
+
+    let filename = format!("{}.jpg", Uuid::new_v4());
+    path.push(filename);
+
+    // Handle data URI scheme if present (e.g. "data:image/jpeg;base64,...")
+    let b64_string = if let Some(index) = base64_data.find(',') {
+        &base64_data[index + 1..]
+    } else {
+        &base64_data
+    };
+
+    // Fix: Remove any whitespace (newlines) that might be in the base64 string
+    let clean_b64: String = b64_string.chars().filter(|c| !c.is_whitespace()).collect();
+
+    let decoded = BASE64_STANDARD
+        .decode(clean_b64)
+        .map_err(|e| e.to_string())?;
+    fs::write(&path, decoded).map_err(|e| e.to_string())?;
+
+    // Return connection asset protocol URL for frontend display
+    // Windows path needs to be converted for convertFileSrc in frontend,
+    // but here we just return absolute path and let frontend handle conversion
+    Ok(path.to_string_lossy().to_string())
+}

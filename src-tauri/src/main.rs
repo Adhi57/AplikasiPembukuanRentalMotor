@@ -28,6 +28,12 @@ fn main() {
             handlers::transaksi::get_transaksi_by_id,
             handlers::transaksi::update_transaksi,
             handlers::transaksi::delete_transaksi,
+            handlers::bukti_pelunasan::get_all_bukti_pelunasan,
+            handlers::bukti_pelunasan::create_bukti_pelunasan,
+            handlers::bukti_pelunasan::get_bukti_pelunasan_by_id,
+            handlers::bukti_pelunasan::update_bukti_pelunasan,
+            handlers::bukti_pelunasan::delete_bukti_pelunasan,
+            handlers::bukti_pelunasan::save_bukti_pelunasan_image,
         ])
         .run(tauri::generate_context!())
         .expect("error running tauri app");
