@@ -13,15 +13,19 @@
     "windows": [
       {
         "title": "aplikasipembukuan",
-        "width": 800,
-        "height": 600
+        "width": 1280,
+        "height": 720,
+        "maximized": true,
+        "resizable": true
       }
     ],
     "security": {
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": [
+          "**"
+        ]
       }
     }
   },

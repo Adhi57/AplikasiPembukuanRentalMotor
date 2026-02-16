@@ -44,3 +44,12 @@ pub struct BuktiPelunasan {
     pub metode_bayar: String,
     pub foto_bukti: String,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct PengeluaranRental {
+    pub pengeluaran_id: i32,
+    pub tanggal: String,
+    pub jenis: String,
+    pub nominal: i64,
+    pub keterangan: String,
+}

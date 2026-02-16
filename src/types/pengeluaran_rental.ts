@@ -1,6 +1,5 @@
 export interface PengeluaranRental {
     pengeluaran_id: number;
-    transaksi_id: number;
     tanggal: string;
     jenis: string;
     nominal: number;

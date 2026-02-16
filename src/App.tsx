@@ -16,6 +16,9 @@ import BuktiPelunasanList from "./components/pages/BuktiPelunasan/BuktiPelunasan
 import BuktiPelunasanAdd from "./components/pages/BuktiPelunasan/BuktiPelunasanAdd";
 import BuktiPelunasanEdit from "./components/pages/BuktiPelunasan/BuktiPelunasanEdit";
 import BuktiPelunasanLihat from "./components/pages/BuktiPelunasan/BuktiPelunasanLihat";
+import PengeluaranRentalList from "./components/pages/PengeluaranRental/PengeluaranRentalList";
+import PengeluaranRentalAdd from "./components/pages/PengeluaranRental/PengeluaranRentalAdd";
+import PengeluaranRentalEdit from "./components/pages/PengeluaranRental/PengeluaranRentalEdit";
 
 export default function App() {
   return (
@@ -36,6 +39,9 @@ export default function App() {
           <Route path="/bukti_pelunasan/tambah" element={<BuktiPelunasanAdd />} />
           <Route path="/bukti_pelunasan/edit/:id" element={<BuktiPelunasanEdit />} />
           <Route path="/bukti_pelunasan/lihat/:id" element={<BuktiPelunasanLihat />} />
+          <Route path="/pengeluaran_rental" element={<PengeluaranRentalList />} />
+          <Route path="/pengeluaran_rental/tambah" element={<PengeluaranRentalAdd />} />
+          <Route path="/pengeluaran_rental/edit/:id" element={<PengeluaranRentalEdit />} />
         </Routes>
       </PageWrapper>
     </BrowserRouter>

@@ -4,9 +4,9 @@ import { ChevronDown } from "lucide-react";
 // Wrapper untuk Form Container agar senada dengan Table
 export function FormCard({ children, title, description, className = "" }: { children: ReactNode; title?: string; description?: string; className?: string }) {
     return (
-        <div className={`bg-slate-800 backdrop-blur-sm rounded-xl shadow-xl border border-slate-800 overflow-hidden ${className}`}>
+        <div className={`bg-slate-800 backdrop-blur-sm rounded-xl shadow-xl border border-slate-700 overflow-hidden ${className}`}>
             {(title || description) && (
-                <div className="p-6 border-b border-slate-800/50">
+                <div className="p-6 border-b border-slate-700">
                     {title && <h3 className="text-lg font-bold text-slate-100">{title}</h3>}
                     {description && <p className="text-sm text-slate-400 mt-1">{description}</p>}
                 </div>
@@ -33,16 +33,16 @@ export function Label({ children, className = "", required = false, ...props }: 
 
 // Base styles for inputs
 const inputBaseStyles = `
-    w-full bg-gray-900 border rounded-lg px-4 text-slate-200 
-    placeholder-slate-700 focus:outline-none focus:ring-2 transition-all
+    w-full bg-slate-800 border rounded-lg px-4 text-slate-100 
+    placeholder-slate-500 focus:outline-none focus:ring-2 transition-all
     disabled:opacity-50 disabled:cursor-not-allowed
     scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent
 `;
 
 const getStatusStyles = (error?: string) =>
     error
-        ? "border-red-900/50 focus:border-red-500 focus:ring-red-500/20"
-        : "border-slate-800 focus:border-blue-600 focus:ring-blue-600/20";
+        ? "border-red-500 focus:border-red-500 focus:ring-red-500"
+        : "border-slate-700 focus:border-blue-500 focus:ring-blue-500";
 
 // Input text biasa
 export const Input = forwardRef<HTMLInputElement, ComponentProps<"input"> & { error?: string }>(

@@ -71,6 +71,15 @@ pub fn init_db() -> Result<()> {
             metode_bayar TEXT,
             foto_bukti TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS pengeluaran_rental (
+            pengeluaran_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tanggal TEXT,
+            jenis TEXT,
+            nominal INTEGER,
+            keterangan TEXT
+        );
+
         ",
     )?;
 

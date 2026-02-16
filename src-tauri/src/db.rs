@@ -389,3 +389,71 @@ pub fn save_bukti_pelunasan_image(base64_data: String) -> Result<String, String>
     // but here we just return absolute path and let frontend handle conversion
     Ok(path.to_string_lossy().to_string())
 }
+
+pub fn get_all_pengeluaran_rental(
+    conn: &Connection,
+) -> Result<Vec<crate::models::PengeluaranRental>> {
+    let mut stmt = conn.prepare(
+        "SELECT pengeluaran_id, tanggal, jenis, nominal, keterangan FROM pengeluaran_rental",
+    )?;
+    let pengeluaran_iter = stmt.query_map([], |row| {
+        Ok(crate::models::PengeluaranRental {
+            pengeluaran_id: row.get(0)?,
+            tanggal: row.get(1)?,
+            jenis: row.get(2)?,
+            nominal: row.get(3)?,
+            keterangan: row.get(4)?,
+        })
+    })?;
+
+    let mut result = Vec::new();
+    for p in pengeluaran_iter {
+        result.push(p?);
+    }
+    Ok(result)
+}
+
+pub fn create_pengeluaran_rental(
+    conn: &Connection,
+    data: crate::models::PengeluaranRental,
+) -> Result<()> {
+    conn.execute("INSERT INTO pengeluaran_rental (tanggal, jenis, nominal, keterangan) VALUES (?1, ?2, ?3, ?4)", (data.tanggal, data.jenis, data.nominal, data.keterangan))?;
+    Ok(())
+}
+
+pub fn get_pengeluaran_rental_by_id(
+    conn: &Connection,
+    id: i32,
+) -> Result<crate::models::PengeluaranRental> {
+    let mut stmt = conn.prepare("SELECT pengeluaran_id, tanggal, jenis, nominal, keterangan FROM pengeluaran_rental WHERE pengeluaran_id = ?1")?;
+    let mut rows = stmt.query([id])?;
+
+    if let Some(row) = rows.next()? {
+        Ok(crate::models::PengeluaranRental {
+            pengeluaran_id: row.get(0)?,
+            tanggal: row.get(1)?,
+            jenis: row.get(2)?,
+            nominal: row.get(3)?,
+            keterangan: row.get(4)?,
+        })
+    } else {
+        Err(rusqlite::Error::QueryReturnedNoRows)
+    }
+}
+
+pub fn update_pengeluaran_rental(
+    conn: &Connection,
+    id: i32,
+    data: crate::models::PengeluaranRental,
+) -> Result<()> {
+    conn.execute("UPDATE pengeluaran_rental SET tanggal = ?1, jenis = ?2, nominal = ?3, keterangan = ?4 WHERE pengeluaran_id = ?5", (data.tanggal, data.jenis, data.nominal, data.keterangan, id))?;
+    Ok(())
+}
+
+pub fn delete_pengeluaran_rental(conn: &Connection, id: i32) -> Result<()> {
+    conn.execute(
+        "DELETE FROM pengeluaran_rental WHERE pengeluaran_id = ?1",
+        (id,),
+    )?;
+    Ok(())
+}

@@ -34,6 +34,14 @@ fn main() {
             handlers::bukti_pelunasan::update_bukti_pelunasan,
             handlers::bukti_pelunasan::delete_bukti_pelunasan,
             handlers::bukti_pelunasan::save_bukti_pelunasan_image,
+            handlers::pengeluaran_rental::get_all_pengeluaran_rental,
+            handlers::pengeluaran_rental::create_pengeluaran_rental,
+            handlers::pengeluaran_rental::get_pengeluaran_rental_by_id,
+            handlers::pengeluaran_rental::update_pengeluaran_rental,
+            handlers::pengeluaran_rental::delete_pengeluaran_rental,
+            commands::open_folder,
+            commands::save_file,
+            commands::get_downloads_path,
         ])
         .run(tauri::generate_context!())
         .expect("error running tauri app");

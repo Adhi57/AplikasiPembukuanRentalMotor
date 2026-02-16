@@ -55,6 +55,11 @@ const menuGroups: MenuGroup[] = [
     title: "KEUANGAN",
     items: [
       {
+        name: "Pengeluaran Rental",
+        path: "/pengeluaran_rental",
+        icon: <Wallet size={18} />,
+      },
+      {
         name: "Pembukuan",
         path: "/pembukuan",
         icon: <Wallet size={18} />,
@@ -132,6 +137,11 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* Footer */}
+      <div className="absolute bottom-0 left-0 w-full px-6 py-4 border-t border-slate-700">
+        <p className="text-xs text-slate-500 text-center">Developed by <a href="https://www.instagram.com/hawkware.smg/" target="_blank" rel="noopener noreferrer" className="text-slate-400 font-medium hover:text-blue-400 transition">@hawkware.smg</a></p>
+      </div>
     </aside>
   )
 }

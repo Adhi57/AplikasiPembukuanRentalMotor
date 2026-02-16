@@ -128,7 +128,7 @@ const MotorEntryForm: React.FC<MotorFormProps> = ({ initialData, onSubmit, isLoa
           <FormGroup>
             <Label required>Status</Label>
             <select
-              className="w-full bg-gray-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               {...register('status', { required: 'Status wajib diisi' })}
             >
               <option value="tersedia">Tersedia</option>

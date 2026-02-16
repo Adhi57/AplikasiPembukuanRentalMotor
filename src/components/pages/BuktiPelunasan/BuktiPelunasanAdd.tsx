@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Receipt, User, Bike, Calendar, DollarSign } from "lucide-react";
+import { ArrowLeft, Receipt, User, Bike, Calendar, DollarSign, AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Transaksi } from "../../../types/transaksi.type";
 import { Motor } from "../../../types/motor.type";
 import { Penyewa } from "../../../types/penyewa.type";
+import { BuktiPelunasan } from "../../../types/bukti_pelunasan.type";
 import { getMotor } from "../../../services/motor.service";
 import { PenyewaService, TransaksiService } from "../../../services/penyewa.service";
 
@@ -20,9 +21,11 @@ export default function BuktiPelunasanAdd() {
     const [transaksiList, setTransaksiList] = useState<Transaksi[]>([]);
     const [motors, setMotors] = useState<Motor[]>([]);
     const [penyewas, setPenyewas] = useState<Penyewa[]>([]);
+    const [existingBukti, setExistingBukti] = useState<BuktiPelunasan[]>([]);
     const [loadingData, setLoadingData] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState("");
+    const [showConfirm, setShowConfirm] = useState(false);
 
     const [bukti, setBukti] = useState({
         bukti_id: 0,
@@ -41,14 +44,16 @@ export default function BuktiPelunasanAdd() {
     const fetchReferenceData = async () => {
         try {
             setLoadingData(true);
-            const [t, m, p] = await Promise.all([
+            const [t, m, p, b] = await Promise.all([
                 TransaksiService.getAll(),
                 getMotor(),
                 PenyewaService.getAll(),
+                invoke<BuktiPelunasan[]>("get_all_bukti_pelunasan"),
             ]);
             setTransaksiList(t);
             setMotors(m);
             setPenyewas(p);
+            setExistingBukti(b);
         } catch (err) {
             console.error("Failed to fetch reference data:", err);
             setError("Gagal memuat data referensi");
@@ -56,6 +61,14 @@ export default function BuktiPelunasanAdd() {
             setLoadingData(false);
         }
     };
+
+    // Get transaksi_id yang sudah lunas (sudah punya bukti pelunasan)
+    const paidTransaksiIds = new Set(existingBukti.map((b) => b.transaksi_id));
+
+    // Filter: hanya tampilkan transaksi yang BELUM ada bukti pelunasannya
+    const availableTransaksi = transaksiList.filter(
+        (t) => !paidTransaksiIds.has(t.transaksi_id)
+    );
 
     const getMotorName = (id: number) => {
         const motor = motors.find((m) => m.motor_id === id);
@@ -89,7 +102,7 @@ export default function BuktiPelunasanAdd() {
         });
     };
 
-    const transaksiOptions = transaksiList.map((t) => ({
+    const transaksiOptions = availableTransaksi.map((t) => ({
         value: String(t.transaksi_id),
         label: `#${t.transaksi_id} — ${getPenyewaName(t.penyewa_id)} — ${getMotorName(t.motor_id)}`,
     }));
@@ -103,7 +116,7 @@ export default function BuktiPelunasanAdd() {
         });
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleFormSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
 
@@ -111,6 +124,13 @@ export default function BuktiPelunasanAdd() {
             setError("Pilih transaksi terlebih dahulu");
             return;
         }
+
+        // Show confirmation dialog
+        setShowConfirm(true);
+    };
+
+    const handleConfirmSubmit = async () => {
+        setShowConfirm(false);
 
         try {
             setSubmitting(true);
@@ -145,6 +165,68 @@ export default function BuktiPelunasanAdd() {
 
     return (
         <div className="space-y-6">
+            {/* Confirmation Modal */}
+            {showConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-amber-500/20 rounded-lg">
+                                <AlertTriangle size={20} className="text-amber-400" />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-100">Konfirmasi Pelunasan</h3>
+                        </div>
+
+                        <div className="space-y-3 mb-6">
+                            <p className="text-sm text-slate-300">
+                                Apakah Anda yakin ingin mencatat pelunasan untuk transaksi ini?
+                            </p>
+
+                            {selectedTransaksi && (
+                                <div className="bg-slate-900 rounded-lg p-4 space-y-2">
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-400">Transaksi</span>
+                                        <span className="text-slate-200 font-medium">#{selectedTransaksi.transaksi_id}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-400">Penyewa</span>
+                                        <span className="text-slate-200">{getPenyewaName(selectedTransaksi.penyewa_id)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-400">Motor</span>
+                                        <span className="text-slate-200">{getMotorName(selectedTransaksi.motor_id)}</span>
+                                    </div>
+                                    <hr className="border-slate-700" />
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-400">Jumlah Bayar</span>
+                                        <span className="text-emerald-400 font-bold">{formatCurrency(bukti.jumlah_bayar)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-400">Metode</span>
+                                        <span className="text-slate-200 capitalize">{bukti.metode_bayar}</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            <p className="text-xs text-amber-400/80">
+                                Setelah dicatat, transaksi ini akan ditandai sebagai lunas dan tidak bisa dipilih lagi.
+                            </p>
+                        </div>
+
+                        <div className="flex gap-3 justify-end">
+                            <Button
+                                label="Batal"
+                                variant="secondary"
+                                onClick={() => setShowConfirm(false)}
+                            />
+                            <Button
+                                label="Ya, Simpan Pelunasan"
+                                onClick={handleConfirmSubmit}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
             <div className="flex items-center gap-4">
                 <Link
@@ -162,7 +244,7 @@ export default function BuktiPelunasanAdd() {
             <div className="max-w-4xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Form */}
                 <div className="lg:col-span-2 bg-slate-800 rounded-xl border border-slate-700 p-6">
-                    <form onSubmit={handleSubmit} className="space-y-5">
+                    <form onSubmit={handleFormSubmit} className="space-y-5">
                         {/* Transaksi Select */}
                         <Select
                             label="Pilih Transaksi"
@@ -173,6 +255,12 @@ export default function BuktiPelunasanAdd() {
                             options={transaksiOptions}
                             required
                         />
+
+                        {availableTransaksi.length === 0 && (
+                            <div className="p-3 bg-amber-900/20 border border-amber-800/50 rounded-lg">
+                                <p className="text-amber-400 text-sm">Semua transaksi sudah memiliki bukti pelunasan.</p>
+                            </div>
+                        )}
 
                         {/* Tanggal Bayar */}
                         <Input
