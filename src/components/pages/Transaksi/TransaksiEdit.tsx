@@ -17,6 +17,7 @@ export default function TransaksiEdit() {
     const [fetching, setFetching] = useState(true);
     const [motors, setMotors] = useState<Motor[]>([]);
     const [penyewas, setPenyewas] = useState<Penyewa[]>([]);
+    const [dendaPerHari, setDendaPerHari] = useState(0);
 
     useEffect(() => {
         fetchData();
@@ -25,14 +26,16 @@ export default function TransaksiEdit() {
     const fetchData = async () => {
         setFetching(true);
         try {
-            const [m, p, result] = await Promise.all([
+            const [m, p, result, dendaStr] = await Promise.all([
                 getMotor(),
                 PenyewaService.getAll(),
-                invoke<Transaksi>("get_transaksi_by_id", { id: Number(id) })
+                invoke<Transaksi>("get_transaksi_by_id", { id: Number(id) }),
+                invoke<string>("get_pengaturan", { key: "denda_per_hari" }).catch(() => "0"),
             ]);
 
             setMotors(m);
             setPenyewas(p);
+            setDendaPerHari(Number(dendaStr) || 0);
 
             // Map result to form data format
             const { transaksi_id, ...formData } = result;
@@ -87,6 +90,7 @@ export default function TransaksiEdit() {
                 isLoading={loading}
                 motors={motors}
                 penyewas={penyewas}
+                dendaPerHari={dendaPerHari}
             />
         </div>
     );

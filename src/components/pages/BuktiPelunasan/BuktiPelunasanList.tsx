@@ -1,15 +1,23 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Link } from "react-router-dom";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Calendar } from "lucide-react";
 
 import { BuktiPelunasan } from "../../../types/bukti_pelunasan.type";
 import Button from "@/components/ui/Button";
 import Table from "@/components/ui/Table";
 
+const METODE_OPTIONS = [
+    { value: "semua", label: "Semua Metode" },
+    { value: "tunai", label: "Tunai" },
+    { value: "transfer", label: "Transfer" },
+];
+
 export default function BuktiPelunasanList() {
     const [buktiList, setBuktiList] = useState<BuktiPelunasan[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
+    const [metodeFilter, setMetodeFilter] = useState("semua");
+    const [bulanFilter, setBulanFilter] = useState("");
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -62,14 +70,37 @@ export default function BuktiPelunasanList() {
         );
     };
 
+    // Filter logic
     const filteredBukti = buktiList.filter((b) => {
+        // Metode filter
+        if (metodeFilter !== "semua" && b.metode_bayar.toLowerCase() !== metodeFilter) return false;
+
+        // Bulan filter (format: "YYYY-MM")
+        if (bulanFilter && !b.tanggal_bayar.startsWith(bulanFilter)) return false;
+
+        // Search
         const search = searchTerm.toLowerCase();
-        return (
-            b.tanggal_bayar.includes(search) ||
-            b.metode_bayar.toLowerCase().includes(search) ||
-            String(b.transaksi_id).includes(search)
-        );
+        if (search) {
+            return (
+                b.tanggal_bayar.includes(search) ||
+                b.metode_bayar.toLowerCase().includes(search) ||
+                String(b.transaksi_id).includes(search) ||
+                String(b.jumlah_bayar).includes(search)
+            );
+        }
+
+        return true;
     });
+
+    // Counts for metode tabs
+    const metodeCounts = {
+        semua: buktiList.length,
+        tunai: buktiList.filter(b => b.metode_bayar.toLowerCase() === "tunai").length,
+        transfer: buktiList.filter(b => b.metode_bayar.toLowerCase() === "transfer").length,
+    };
+
+    // Total jumlah for filtered results
+    const totalFiltered = filteredBukti.reduce((sum, b) => sum + b.jumlah_bayar, 0);
 
     const columns = [
         {
@@ -88,7 +119,9 @@ export default function BuktiPelunasanList() {
         {
             header: "Jumlah Bayar",
             accessor: "jumlah_bayar" as const,
-            render: (value: number) => formatCurrency(value),
+            render: (value: number) => (
+                <span className="text-emerald-400 font-medium">{formatCurrency(value)}</span>
+            ),
         },
         {
             header: "Metode Bayar",
@@ -137,7 +170,7 @@ export default function BuktiPelunasanList() {
                     <h2 className="text-xl font-bold text-slate-100">
                         Daftar Bukti Pelunasan
                     </h2>
-                    <p className="text-sm text-slate-300">
+                    <p className="text-sm text-slate-400">
                         Total {buktiList.length} bukti pelunasan
                     </p>
                 </div>
@@ -150,7 +183,7 @@ export default function BuktiPelunasanList() {
                         />
                         <input
                             type="text"
-                            placeholder="Cari tanggal, metode, atau transaksi ID..."
+                            placeholder="Cari tanggal, metode, ID..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 focus:ring-2 focus:ring-blue-500"
@@ -162,6 +195,62 @@ export default function BuktiPelunasanList() {
                         icon={<Plus size={16} />}
                         href="/bukti_pelunasan/tambah"
                     />
+                </div>
+            </div>
+
+            {/* Filter Row */}
+            <div className="px-5 pb-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                {/* Metode Filter Tabs */}
+                <div className="flex gap-2 flex-wrap">
+                    {METODE_OPTIONS.map((opt) => {
+                        const count = metodeCounts[opt.value as keyof typeof metodeCounts];
+                        const isActive = metodeFilter === opt.value;
+                        return (
+                            <button
+                                key={opt.value}
+                                onClick={() => setMetodeFilter(opt.value)}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${isActive
+                                        ? opt.value === "tunai"
+                                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50"
+                                            : opt.value === "transfer"
+                                                ? "bg-blue-500/20 text-blue-300 border border-blue-500/50"
+                                                : "bg-slate-600 text-slate-200 border border-slate-500"
+                                        : "bg-slate-700/50 text-slate-400 border border-slate-700 hover:bg-slate-700 hover:text-slate-200"
+                                    }`}
+                            >
+                                {opt.label}
+                                <span className={`text-xs px-1.5 py-0.5 rounded-full ${isActive ? "bg-white/10" : "bg-slate-600"
+                                    }`}>
+                                    {count}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {/* Month Filter + Summary */}
+                <div className="flex items-center gap-3">
+                    <div className="relative">
+                        <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="month"
+                            value={bulanFilter}
+                            onChange={(e) => setBulanFilter(e.target.value)}
+                            className="pl-10 pr-4 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+                    {bulanFilter && (
+                        <button
+                            onClick={() => setBulanFilter("")}
+                            className="text-xs text-slate-400 hover:text-slate-200 underline"
+                        >
+                            Reset
+                        </button>
+                    )}
+                    <div className="text-sm text-slate-400">
+                        Ditampilkan: <span className="text-emerald-400 font-semibold">{filteredBukti.length}</span> data
+                        — Total: <span className="text-emerald-400 font-semibold">{formatCurrency(totalFiltered)}</span>
+                    </div>
                 </div>
             </div>
 

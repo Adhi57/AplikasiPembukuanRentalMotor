@@ -186,7 +186,7 @@ pub fn delete_penyewa(conn: &Connection, id: i32) -> Result<()> {
 }
 
 pub fn get_all_transaksi(conn: &Connection) -> Result<Vec<crate::models::Transaksi>> {
-    let mut stmt = conn.prepare("SELECT transaksi_id, motor_id, penyewa_id, tanggal_sewa, tanggal_kembali_rencana, tanggal_kembali_aktual, hari_terlambat, total_bayar, status, denda FROM transaksi")?;
+    let mut stmt = conn.prepare("SELECT transaksi_id, motor_id, penyewa_id, tanggal_sewa, tanggal_kembali_rencana, tanggal_kembali_aktual, hari_terlambat, total_bayar, status, denda, foto_bukti FROM transaksi")?;
     let transaksi_iter = stmt.query_map([], |row| {
         Ok(crate::models::Transaksi {
             transaksi_id: row.get(0)?,
@@ -199,6 +199,7 @@ pub fn get_all_transaksi(conn: &Connection) -> Result<Vec<crate::models::Transak
             total_bayar: row.get(7)?,
             status: row.get(8)?,
             denda: row.get(9)?,
+            foto_bukti: row.get(10)?,
         })
     })?;
 
@@ -213,8 +214,8 @@ pub fn create_transaksi(conn: &Connection, data: crate::models::Transaksi) -> Re
     let motor_id = data.motor_id;
 
     conn.execute(
-        "INSERT INTO transaksi (motor_id, penyewa_id, tanggal_sewa, tanggal_kembali_rencana, tanggal_kembali_aktual, hari_terlambat, total_bayar, status, denda) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        (data.motor_id, data.penyewa_id, data.tanggal_sewa, data.tanggal_kembali_rencana, data.tanggal_kembali_aktual, data.hari_terlambat, data.total_bayar, data.status, data.denda),
+        "INSERT INTO transaksi (motor_id, penyewa_id, tanggal_sewa, tanggal_kembali_rencana, tanggal_kembali_aktual, hari_terlambat, total_bayar, status, denda, foto_bukti) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        (data.motor_id, data.penyewa_id, data.tanggal_sewa, data.tanggal_kembali_rencana, data.tanggal_kembali_aktual, data.hari_terlambat, data.total_bayar, data.status, data.denda, data.foto_bukti),
     )?;
 
     // Update motor status to dipinjam
@@ -227,7 +228,7 @@ pub fn create_transaksi(conn: &Connection, data: crate::models::Transaksi) -> Re
 }
 
 pub fn get_transaksi_by_id(conn: &Connection, id: i32) -> Result<crate::models::Transaksi> {
-    let mut stmt = conn.prepare("SELECT transaksi_id, motor_id, penyewa_id, tanggal_sewa, tanggal_kembali_rencana, tanggal_kembali_aktual, hari_terlambat, total_bayar, status, denda FROM transaksi WHERE transaksi_id = ?1")?;
+    let mut stmt = conn.prepare("SELECT transaksi_id, motor_id, penyewa_id, tanggal_sewa, tanggal_kembali_rencana, tanggal_kembali_aktual, hari_terlambat, total_bayar, status, denda, foto_bukti FROM transaksi WHERE transaksi_id = ?1")?;
     let mut rows = stmt.query([id])?;
 
     if let Some(row) = rows.next()? {
@@ -242,6 +243,7 @@ pub fn get_transaksi_by_id(conn: &Connection, id: i32) -> Result<crate::models::
             total_bayar: row.get(7)?,
             status: row.get(8)?,
             denda: row.get(9)?,
+            foto_bukti: row.get(10)?,
         })
     } else {
         Err(rusqlite::Error::QueryReturnedNoRows)
@@ -257,7 +259,7 @@ pub fn update_transaksi(conn: &Connection, id: i32, data: crate::models::Transak
     let new_motor_id = data.motor_id;
     let is_kembali = data.status == "kembali";
 
-    conn.execute("UPDATE transaksi SET motor_id = ?1, penyewa_id = ?2, tanggal_sewa = ?3, tanggal_kembali_rencana = ?4, tanggal_kembali_aktual = ?5, hari_terlambat = ?6, total_bayar = ?7, status = ?8, denda = ?9 WHERE transaksi_id = ?10", (data.motor_id, data.penyewa_id, data.tanggal_sewa, data.tanggal_kembali_rencana, data.tanggal_kembali_aktual, data.hari_terlambat, data.total_bayar, data.status, data.denda, id))?;
+    conn.execute("UPDATE transaksi SET motor_id = ?1, penyewa_id = ?2, tanggal_sewa = ?3, tanggal_kembali_rencana = ?4, tanggal_kembali_aktual = ?5, hari_terlambat = ?6, total_bayar = ?7, status = ?8, denda = ?9, foto_bukti = ?10 WHERE transaksi_id = ?11", (data.motor_id, data.penyewa_id, data.tanggal_sewa, data.tanggal_kembali_rencana, data.tanggal_kembali_aktual, data.hari_terlambat, data.total_bayar, data.status, data.denda, data.foto_bukti, id))?;
 
     // If motor changed, reset old motor status
     if old_motor_id != new_motor_id {

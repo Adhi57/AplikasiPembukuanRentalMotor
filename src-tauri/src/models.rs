@@ -33,6 +33,7 @@ pub struct Transaksi {
     pub total_bayar: Option<i64>,
     pub status: String,
     pub denda: Option<i64>,
+    pub foto_bukti: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]

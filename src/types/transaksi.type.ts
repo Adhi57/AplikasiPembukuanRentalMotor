@@ -9,4 +9,5 @@ export interface Transaksi {
     total_bayar?: number | null;
     status: string;
     denda?: number | null;
+    foto_bukti?: string | null;
 }

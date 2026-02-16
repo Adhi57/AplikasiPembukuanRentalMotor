@@ -7,6 +7,7 @@ import {
   Wallet,
   BarChart3,
   Settings,
+  Banknote,
 } from "lucide-react"
 
 interface MenuItem {
@@ -60,9 +61,9 @@ const menuGroups: MenuGroup[] = [
         icon: <Wallet size={18} />,
       },
       {
-        name: "Pembukuan",
-        path: "/pembukuan",
-        icon: <Wallet size={18} />,
+        name: "Buku Kas",
+        path: "/kas",
+        icon: <Banknote size={18} />,
       },
       {
         name: "Laporan",
@@ -75,8 +76,8 @@ const menuGroups: MenuGroup[] = [
     title: "PENGATURAN",
     items: [
       {
-        name: "Pengaturan Denda",
-        path: "/pengaturan/denda",
+        name: "Pengaturan",
+        path: "/pengaturan",
         icon: <Settings size={18} />,
       },
     ],

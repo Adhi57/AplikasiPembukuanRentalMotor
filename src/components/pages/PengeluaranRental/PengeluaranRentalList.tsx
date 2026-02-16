@@ -11,7 +11,7 @@ import Button from "@/components/ui/Button";
 export default function PengeluaranRentalList() {
     const [pengeluaranList, setPengeluaranList] = useState<PengeluaranRental[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
-    const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
+    const [selectedMonth, setSelectedMonth] = useState<string>(""); // Semua Bulan
     const [loading, setLoading] = useState(true);
     const [collapsedDates, setCollapsedDates] = useState<Set<string>>(new Set());
     const [toast, setToast] = useState<{ show: boolean; message: string; filePath: string; folderPath: string }>({
@@ -354,7 +354,7 @@ export default function PengeluaranRentalList() {
                         <h2 className="text-xl font-bold text-slate-100">
                             Daftar Pengeluaran Rental
                         </h2>
-                        <p className="text-sm text-slate-300">
+                        <p className="text-sm text-slate-400">
                             Dikelompokkan berdasarkan tanggal
                         </p>
                     </div>

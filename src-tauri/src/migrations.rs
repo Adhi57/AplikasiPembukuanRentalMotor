@@ -83,5 +83,11 @@ pub fn init_db() -> Result<()> {
         ",
     )?;
 
+    // Migration: add foto_bukti column if not exists
+    let _ = conn.execute(
+        "ALTER TABLE transaksi ADD COLUMN foto_bukti TEXT DEFAULT ''",
+        [],
+    );
+
     Ok(())
 }

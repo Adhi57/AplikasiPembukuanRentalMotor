@@ -15,16 +15,19 @@ export default function TransaksiAdd() {
     const [loading, setLoading] = useState(false);
     const [motors, setMotors] = useState<Motor[]>([]);
     const [penyewas, setPenyewas] = useState<Penyewa[]>([]);
+    const [dendaPerHari, setDendaPerHari] = useState(0);
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [m, p] = await Promise.all([
+                const [m, p, dendaStr] = await Promise.all([
                     getMotor(),
-                    PenyewaService.getAll()
+                    PenyewaService.getAll(),
+                    invoke<string>("get_pengaturan", { key: "denda_per_hari" }).catch(() => "0"),
                 ]);
                 setMotors(m);
                 setPenyewas(p);
+                setDendaPerHari(Number(dendaStr) || 0);
             } catch (error) {
                 console.error("Failed to fetch data:", error);
             }
@@ -64,6 +67,7 @@ export default function TransaksiAdd() {
                     isLoading={loading}
                     motors={motors}
                     penyewas={penyewas}
+                    dendaPerHari={dendaPerHari}
                 />
             </div>
         </div>

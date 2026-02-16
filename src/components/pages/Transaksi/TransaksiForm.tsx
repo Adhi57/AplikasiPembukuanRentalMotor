@@ -1,11 +1,13 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { FormCard, FormGroup, Label, Input, Select } from '../../ui/Form';
 import Button from '../../ui/Button';
-import { Save } from 'lucide-react';
+import { Save, Upload, AlertTriangle, Camera } from 'lucide-react';
 import { Transaksi } from '../../../types/transaksi.type';
 import { Motor } from '../../../types/motor.type';
 import { Penyewa } from '../../../types/penyewa.type';
+import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
 export type TransaksiFormData = Omit<Transaksi, 'transaksi_id'>;
 
@@ -15,9 +17,13 @@ interface TransaksiFormProps {
     isLoading?: boolean;
     motors: Motor[];
     penyewas: Penyewa[];
+    dendaPerHari: number;
 }
 
-const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, isLoading, motors, penyewas }) => {
+const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, isLoading, motors, penyewas, dendaPerHari }) => {
+    const [preview, setPreview] = useState<string | null>(null);
+    const [uploadingImage, setUploadingImage] = useState(false);
+
     const {
         register,
         handleSubmit,
@@ -31,26 +37,34 @@ const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, is
             tanggal_sewa: new Date().toISOString().split('T')[0],
             total_bayar: 0,
             hari_terlambat: 0,
-            denda: 0
+            denda: 0,
+            foto_bukti: '',
         },
     });
 
     useEffect(() => {
         if (initialData) {
             reset(initialData);
+            // Set preview for existing photo
+            if (initialData.foto_bukti) {
+                setPreview(convertFileSrc(initialData.foto_bukti));
+            }
         }
     }, [initialData, reset]);
 
     const motorId = watch('motor_id');
     const tanggalSewa = watch('tanggal_sewa');
     const tanggalKembaliRencana = watch('tanggal_kembali_rencana');
+    const tanggalKembaliAktual = watch('tanggal_kembali_aktual');
+    const fotoBuktiPath = watch('foto_bukti');
 
+    // Auto-calculate total_bayar
     useEffect(() => {
         if (motorId && tanggalSewa && tanggalKembaliRencana) {
             const start = new Date(tanggalSewa);
             const end = new Date(tanggalKembaliRencana);
             const diffTime = Math.abs(end.getTime() - start.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1; // Minimal 1 hari
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) || 1;
 
             const motor = motors.find(m => m.motor_id === motorId);
             if (motor) {
@@ -58,6 +72,59 @@ const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, is
             }
         }
     }, [motorId, tanggalSewa, tanggalKembaliRencana, motors, setValue]);
+
+    // Auto-calculate denda when tanggal_kembali_aktual changes
+    useEffect(() => {
+        if (tanggalKembaliAktual && tanggalKembaliRencana) {
+            const rencana = new Date(tanggalKembaliRencana);
+            const aktual = new Date(tanggalKembaliAktual);
+            const diffTime = aktual.getTime() - rencana.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays > 0) {
+                // Terlambat
+                setValue('hari_terlambat', diffDays);
+                setValue('denda', diffDays * dendaPerHari);
+                setValue('status', 'terlambat');
+            } else {
+                // Tepat waktu atau lebih awal
+                setValue('hari_terlambat', 0);
+                setValue('denda', 0);
+                setValue('status', 'kembali');
+            }
+        }
+    }, [tanggalKembaliAktual, tanggalKembaliRencana, dendaPerHari, setValue]);
+
+    // Handle photo upload
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setUploadingImage(true);
+        try {
+            const reader = new FileReader();
+            reader.onload = async () => {
+                const base64 = reader.result as string;
+                setPreview(base64);
+
+                try {
+                    const path = await invoke<string>("save_transaksi_image", { base64 });
+                    setValue('foto_bukti', path);
+                } catch (err) {
+                    console.error("Failed to save image:", err);
+                    alert("Gagal mengunggah gambar");
+                }
+            };
+            reader.readAsDataURL(file);
+        } catch (err) {
+            console.error("File reading error:", err);
+        } finally {
+            setUploadingImage(false);
+        }
+    };
+
+    const hariTerlambat = watch('hari_terlambat');
+    const dendaValue = watch('denda');
 
     return (
         <FormCard
@@ -134,43 +201,89 @@ const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, is
                             error={errors.total_bayar?.message}
                         />
                     </FormGroup>
+                </div>
 
-                    {initialData && (
-                        <>
-                            <FormGroup>
-                                <Label>Tanggal Kembali Aktual</Label>
-                                <Input
-                                    type="date"
-                                    {...register('tanggal_kembali_aktual')}
-                                    error={errors.tanggal_kembali_aktual?.message}
-                                />
-                            </FormGroup>
+                {/* Pengembalian & Denda Section */}
+                <div className="border border-slate-700 rounded-xl p-5 space-y-4">
+                    <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                        <AlertTriangle size={16} className="text-amber-400" />
+                        Pengembalian & Denda
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <FormGroup>
+                            <Label>Tanggal Kembali Aktual</Label>
+                            <Input
+                                type="date"
+                                {...register('tanggal_kembali_aktual')}
+                                error={errors.tanggal_kembali_aktual?.message}
+                            />
+                        </FormGroup>
 
-                            <FormGroup>
-                                <Label>Hari Terlambat</Label>
-                                <Input
-                                    type="number"
-                                    {...register('hari_terlambat', { valueAsNumber: true })}
-                                    error={errors.hari_terlambat?.message}
-                                />
-                            </FormGroup>
+                        <FormGroup>
+                            <Label>Hari Terlambat</Label>
+                            <Input
+                                type="number"
+                                {...register('hari_terlambat', { valueAsNumber: true })}
+                                readOnly
+                                className="bg-slate-900/50 cursor-not-allowed"
+                            />
+                            {typeof hariTerlambat === 'number' && hariTerlambat > 0 && (
+                                <p className="text-xs text-amber-400 mt-1">
+                                    Terlambat {hariTerlambat} hari × Rp {dendaPerHari.toLocaleString('id-ID')}/hari
+                                </p>
+                            )}
+                        </FormGroup>
 
-                            <FormGroup>
-                                <Label>Denda</Label>
-                                <Input
-                                    type="number"
-                                    {...register('denda', { valueAsNumber: true })}
-                                    error={errors.denda?.message}
+                        <FormGroup>
+                            <Label>Denda</Label>
+                            <Input
+                                type="number"
+                                {...register('denda', { valueAsNumber: true })}
+                                readOnly
+                                className="bg-slate-900/50 cursor-not-allowed"
+                            />
+                            {typeof dendaValue === 'number' && dendaValue > 0 && (
+                                <p className="text-xs text-red-400 mt-1 font-semibold">
+                                    Total Denda: Rp {dendaValue.toLocaleString('id-ID')}
+                                </p>
+                            )}
+                        </FormGroup>
+                    </div>
+                </div>
+
+                {/* Foto Bukti Section */}
+                <div className="border border-slate-700 rounded-xl p-5 space-y-4">
+                    <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                        <Camera size={16} className="text-blue-400" />
+                        Foto Bukti Transaksi
+                    </h3>
+                    <div className="flex flex-col gap-4">
+                        {preview && (
+                            <div className="relative w-64 h-48 rounded-lg overflow-hidden border border-slate-600">
+                                <img src={preview} alt="Preview Bukti" className="w-full h-full object-cover" />
+                            </div>
+                        )}
+                        <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg cursor-pointer transition text-sm">
+                                <Upload size={18} />
+                                {fotoBuktiPath ? 'Ganti Foto' : 'Pilih Foto'}
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handleFileChange}
                                 />
-                            </FormGroup>
-                        </>
-                    )}
+                            </label>
+                            {fotoBuktiPath && <span className="text-xs text-slate-400 truncate max-w-[250px]">{fotoBuktiPath}</span>}
+                        </div>
+                    </div>
+                    <input type="hidden" {...register('foto_bukti')} />
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4">
                     <Button
                         type="submit"
-                        loading={isLoading}
+                        loading={isLoading || uploadingImage}
                         icon={<Save size={18} />}
                         label={initialData ? 'Simpan Perubahan' : 'Simpan Transaksi'}
                     />
