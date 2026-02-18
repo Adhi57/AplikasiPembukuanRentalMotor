@@ -248,14 +248,14 @@ export default function TransaksiList() {
                             key={opt.value}
                             onClick={() => setStatusFilter(opt.value)}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${isActive
-                                    ? opt.value === "terlambat"
-                                        ? "bg-red-500/20 text-red-300 border border-red-500/50"
-                                        : opt.value === "dipinjam"
-                                            ? "bg-blue-500/20 text-blue-300 border border-blue-500/50"
-                                            : opt.value === "kembali"
-                                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50"
-                                                : "bg-slate-600 text-slate-200 border border-slate-500"
-                                    : "bg-slate-700/50 text-slate-400 border border-slate-700 hover:bg-slate-700 hover:text-slate-200"
+                                ? opt.value === "terlambat"
+                                    ? "bg-red-500/20 text-red-300 border border-red-500/50"
+                                    : opt.value === "dipinjam"
+                                        ? "bg-blue-500/20 text-blue-300 border border-blue-500/50"
+                                        : opt.value === "kembali"
+                                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50"
+                                            : "bg-slate-600 text-slate-200 border border-slate-500"
+                                : "bg-slate-700/50 text-slate-400 border border-slate-700 hover:bg-slate-700 hover:text-slate-200"
                                 }`}
                         >
                             {opt.label}
@@ -289,7 +289,7 @@ export default function TransaksiList() {
                     >
                         <div className="flex items-center justify-between p-4 border-b border-slate-700">
                             <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
-                                <Image size={18} className="text-purple-400" /> Bukti Transaksi
+                                <Image size={18} className="text-purple-400" /> Bukti Peminjaman
                             </h3>
                             <button
                                 onClick={() => setModalImage(null)}
@@ -301,7 +301,7 @@ export default function TransaksiList() {
                         <div className="p-4 flex items-center justify-center">
                             <img
                                 src={modalImage}
-                                alt="Bukti Transaksi"
+                                alt="Bukti Peminjaman"
                                 className="max-w-full max-h-[70vh] object-contain rounded-lg"
                             />
                         </div>

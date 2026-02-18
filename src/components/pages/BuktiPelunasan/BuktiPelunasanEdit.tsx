@@ -76,6 +76,16 @@ export default function BuktiPelunasanEdit() {
         (t) => t.transaksi_id === bukti?.transaksi_id
     );
 
+    const handleTransaksiChange = (transaksiId: number) => {
+        if (!bukti) return;
+        const transaksi = transaksiList.find((t) => t.transaksi_id === transaksiId);
+        setBukti({
+            ...bukti,
+            transaksi_id: transaksiId,
+            jumlah_bayar: (transaksi?.total_bayar ?? 0) + (transaksi?.denda ?? 0),
+        });
+    };
+
     const transaksiOptions = transaksiList.map((t) => ({
         value: String(t.transaksi_id),
         label: `#${t.transaksi_id} — ${getPenyewaName(t.penyewa_id)} — ${getMotorName(t.motor_id)}`,
@@ -153,7 +163,7 @@ export default function BuktiPelunasanEdit() {
                             label="Pilih Transaksi"
                             value={String(bukti.transaksi_id || "")}
                             onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                                setBukti({ ...bukti, transaksi_id: parseInt(e.target.value) || 0 })
+                                handleTransaksiChange(parseInt(e.target.value) || 0)
                             }
                             options={transaksiOptions}
                             required
@@ -274,6 +284,17 @@ export default function BuktiPelunasanEdit() {
                                         <p className="text-lg text-emerald-400 font-bold">{formatCurrency(selectedTransaksi.total_bayar)}</p>
                                     </div>
                                 </div>
+                                {selectedTransaksi.denda != null && selectedTransaksi.denda > 0 && (
+                                    <div className="flex items-start gap-3">
+                                        <DollarSign size={16} className="text-red-400 mt-0.5 shrink-0" />
+                                        <div>
+                                            <p className="text-xs text-slate-500">Denda</p>
+                                            <p className="text-sm text-red-400 font-semibold">
+                                                {formatCurrency(selectedTransaksi.denda)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <div className="text-center py-6">

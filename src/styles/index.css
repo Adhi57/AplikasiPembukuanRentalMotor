@@ -5,11 +5,18 @@
 /* Global tweaks */
 html,
 body,
-#root {
-  height: 100%;
-}
 
 body {
-  @apply bg-gradient-to-t from-neutral-900 to-zinc-900 text-gray-200; 
-  
+  @apply bg-gradient-to-t from-neutral-900 to-zinc-900 text-gray-200;
+
+}
+
+/* Hide scrollbar but keep scrolling */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

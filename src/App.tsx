@@ -20,6 +20,7 @@ import PengeluaranRentalList from "./components/pages/PengeluaranRental/Pengelua
 import PengeluaranRentalAdd from "./components/pages/PengeluaranRental/PengeluaranRentalAdd";
 import PengeluaranRentalEdit from "./components/pages/PengeluaranRental/PengeluaranRentalEdit";
 import KasList from "./components/pages/Kas/KasList";
+import LaporanBulanan from "./components/pages/Laporan/LaporanBulanan";
 import Pengaturan from "./components/pages/Pengaturan/Pengaturan";
 
 export default function App() {
@@ -45,6 +46,7 @@ export default function App() {
           <Route path="/pengeluaran_rental/tambah" element={<PengeluaranRentalAdd />} />
           <Route path="/pengeluaran_rental/edit/:id" element={<PengeluaranRentalEdit />} />
           <Route path="/kas" element={<KasList />} />
+          <Route path="/laporan" element={<LaporanBulanan />} />
           <Route path="/pengaturan" element={<Pengaturan />} />
         </Routes>
       </PageWrapper>

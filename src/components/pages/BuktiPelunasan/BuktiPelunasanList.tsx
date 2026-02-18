@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Link } from "react-router-dom";
-import { Plus, Search, Calendar } from "lucide-react";
+import { Plus, Search, Calendar, User, Receipt } from "lucide-react";
 
 import { BuktiPelunasan } from "../../../types/bukti_pelunasan.type";
+import { Transaksi } from "../../../types/transaksi.type";
+import { Penyewa } from "../../../types/penyewa.type";
+import { PenyewaService, TransaksiService } from "../../../services/penyewa.service";
+
 import Button from "@/components/ui/Button";
 import Table from "@/components/ui/Table";
 
@@ -15,6 +19,9 @@ const METODE_OPTIONS = [
 
 export default function BuktiPelunasanList() {
     const [buktiList, setBuktiList] = useState<BuktiPelunasan[]>([]);
+    const [transaksiList, setTransaksiList] = useState<Transaksi[]>([]);
+    const [penyewaList, setPenyewaList] = useState<Penyewa[]>([]);
+
     const [searchTerm, setSearchTerm] = useState("");
     const [metodeFilter, setMetodeFilter] = useState("semua");
     const [bulanFilter, setBulanFilter] = useState("");
@@ -27,13 +34,26 @@ export default function BuktiPelunasanList() {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const result = await invoke<BuktiPelunasan[]>("get_all_bukti_pelunasan");
-            setBuktiList(result);
+            const [b, t, p] = await Promise.all([
+                invoke<BuktiPelunasan[]>("get_all_bukti_pelunasan"),
+                TransaksiService.getAll(),
+                PenyewaService.getAll(),
+            ]);
+            setBuktiList(b);
+            setTransaksiList(t);
+            setPenyewaList(p);
         } catch (err) {
             console.error("Failed to fetch data:", err);
         } finally {
             setLoading(false);
         }
+    };
+
+    const getPenyewaName = (transaksiId: number) => {
+        const trx = transaksiList.find((t) => t.transaksi_id === transaksiId);
+        if (!trx) return "-";
+        const penyewa = penyewaList.find((p) => p.penyewa_id === trx.penyewa_id);
+        return penyewa ? penyewa.nama : `Penyewa #${trx.penyewa_id}`;
     };
 
     const handleDelete = async (id: number) => {
@@ -81,11 +101,13 @@ export default function BuktiPelunasanList() {
         // Search
         const search = searchTerm.toLowerCase();
         if (search) {
+            const penyewaName = getPenyewaName(b.transaksi_id).toLowerCase();
             return (
                 b.tanggal_bayar.includes(search) ||
                 b.metode_bayar.toLowerCase().includes(search) ||
                 String(b.transaksi_id).includes(search) ||
-                String(b.jumlah_bayar).includes(search)
+                String(b.jumlah_bayar).includes(search) ||
+                penyewaName.includes(search)
             );
         }
 
@@ -111,6 +133,27 @@ export default function BuktiPelunasanList() {
         {
             header: "Transaksi ID",
             accessor: "transaksi_id" as const,
+            render: (value: number) => (
+                <div className="flex items-center gap-1.5 text-slate-400">
+                    <Receipt size={14} />
+                    <span>#{value}</span>
+                </div>
+            )
+        },
+        {
+            header: "Penyewa",
+            accessor: "transaksi_id" as const, // We use transaksi_id to lookup penyewa
+            render: (transaksiId: number) => {
+                const name = getPenyewaName(transaksiId);
+                return (
+                    <div className="flex items-center gap-2 font-medium text-slate-200">
+                        <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-xs text-slate-400">
+                            <User size={12} />
+                        </div>
+                        {name}
+                    </div>
+                );
+            }
         },
         {
             header: "Tanggal Bayar",
@@ -210,12 +253,12 @@ export default function BuktiPelunasanList() {
                                 key={opt.value}
                                 onClick={() => setMetodeFilter(opt.value)}
                                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${isActive
-                                        ? opt.value === "tunai"
-                                            ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50"
-                                            : opt.value === "transfer"
-                                                ? "bg-blue-500/20 text-blue-300 border border-blue-500/50"
-                                                : "bg-slate-600 text-slate-200 border border-slate-500"
-                                        : "bg-slate-700/50 text-slate-400 border border-slate-700 hover:bg-slate-700 hover:text-slate-200"
+                                    ? opt.value === "tunai"
+                                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50"
+                                        : opt.value === "transfer"
+                                            ? "bg-blue-500/20 text-blue-300 border border-blue-500/50"
+                                            : "bg-slate-600 text-slate-200 border border-slate-500"
+                                    : "bg-slate-700/50 text-slate-400 border border-slate-700 hover:bg-slate-700 hover:text-slate-200"
                                     }`}
                             >
                                 {opt.label}

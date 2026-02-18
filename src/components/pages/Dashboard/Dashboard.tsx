@@ -407,11 +407,11 @@ export default function Dashboard() {
             {/* Motor List Preview */}
             <div className="border-t border-slate-700 pt-3 mt-3 space-y-2">
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Motor Disewa</p>
-              {motors.filter((m) => m.status === "disewa").length === 0 ? (
+              {motors.filter((m) => m.status === "dipinjam").length === 0 ? (
                 <p className="text-xs text-slate-500">Tidak ada motor yang sedang disewa</p>
               ) : (
                 motors
-                  .filter((m) => m.status === "disewa")
+                  .filter((m) => m.status === "dipinjam")
                   .slice(0, 5)
                   .map((motor) => {
                     const trx = transaksiList.find(

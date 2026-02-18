@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
     TrendingUp,
     TrendingDown,
@@ -12,6 +15,11 @@ import {
     Settings,
     AlertTriangle,
     Filter,
+    FileSpreadsheet,
+    FileText,
+    CheckCircle,
+    FolderOpen,
+    X,
 } from "lucide-react";
 
 import { BuktiPelunasan } from "../../../types/bukti_pelunasan.type";
@@ -43,6 +51,12 @@ export default function KasList() {
     const [loading, setLoading] = useState(true);
     const [selectedMonth, setSelectedMonth] = useState<string>("");
     const [selectedAkun, setSelectedAkun] = useState<string>(""); // filter akun
+    const [toast, setToast] = useState<{ show: boolean; message: string; filePath: string; folderPath: string }>({
+        show: false,
+        message: "",
+        filePath: "",
+        folderPath: "",
+    });
 
     // Saldo Awal
     const [saldoAwal, setSaldoAwal] = useState<number>(0);
@@ -126,7 +140,7 @@ export default function KasList() {
                 metode: b.metode_bayar || "Kas",
                 keterangan: `Pelunasan Transaksi #${b.transaksi_id}`,
                 tipe: "masuk" as const,
-                jumlah: b.jumlah_bayar,
+                jumlah: b.jumlah_bayar + (trx && trx.denda ? trx.denda : 0),
             };
         }),
         ...pengeluaranList.map((p) => ({
@@ -184,6 +198,208 @@ export default function KasList() {
         });
     })();
 
+    useEffect(() => {
+        if (toast.show) {
+            const timer = setTimeout(() => setToast((t) => ({ ...t, show: false })), 8000);
+            return () => clearTimeout(timer);
+        }
+    }, [toast.show]);
+
+    const handleOpenFolder = async () => {
+        try {
+            await invoke("open_folder", { path: toast.folderPath });
+        } catch (err) {
+            console.error("Failed to open folder:", err);
+        }
+    };
+
+    const getTimestamp = () => {
+        const now = new Date();
+        return `${now.toISOString().slice(0, 10)}_${now.getHours().toString().padStart(2, "0")}${now.getMinutes().toString().padStart(2, "0")}${now.getSeconds().toString().padStart(2, "0")}`;
+    };
+
+    const formatPlainCurrency = (amount: number) => {
+        return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(amount);
+    };
+
+    const getFilterLabel = () => {
+        const parts: string[] = [];
+        if (selectedMonth) parts.push(getMonthLabel(selectedMonth));
+        if (selectedAkun) parts.push(`Akun: ${selectedAkun}`);
+        return parts.length > 0 ? parts.join(" | ") : "Semua Data";
+    };
+
+    // ======== EXPORT EXCEL ========
+    const handleExportExcel = async () => {
+        try {
+            const fileName = `Buku_Kas_${getTimestamp()}.xlsx`;
+            const rows: any[][] = [];
+
+            // Title & Filter Info
+            rows.push(["LAPORAN BUKU KAS"]);
+            rows.push([`Filter: ${getFilterLabel()}`]);
+            rows.push([]);
+
+            // Summary Info
+            rows.push(["Saldo Awal", saldoAwal]);
+            rows.push(["Total Masuk", totalMasuk]);
+            rows.push(["Total Keluar", totalKeluar]);
+            rows.push(["Saldo Akhir", saldoAkhir]);
+            rows.push([]);
+
+            // Header
+            rows.push(["Tanggal", "No. Ref", "Customer", "Motor", "Keterangan", "Metode", "Tipe", "Masuk", "Keluar", "Saldo"]);
+
+            // Data
+            entriesWithBalance.forEach((e) => {
+                rows.push([
+                    e.tanggal?.slice(0, 10) || "-",
+                    e.noRef,
+                    e.customer,
+                    e.motor,
+                    e.keterangan,
+                    e.metode,
+                    e.tipe === "masuk" ? "Masuk" : "Keluar",
+                    e.tipe === "masuk" ? e.jumlah : 0,
+                    e.tipe === "keluar" ? e.jumlah : 0,
+                    e.saldo,
+                ]);
+            });
+
+            // Add Init Row at bottom if applies
+            if (saldoAwal > 0) {
+                rows.push(["-", "INIT", "-", "-", "Saldo Awal", "-", "Saldo", saldoAwal, 0, saldoAwal]);
+            }
+
+            // Total Row
+            rows.push(["", "", "", "", "", "", "TOTAL", totalMasuk, totalKeluar, saldoAkhir]);
+
+            const ws = XLSX.utils.aoa_to_sheet(rows);
+
+            // Set column widths
+            ws["!cols"] = [
+                { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 30 },
+                { wch: 10 }, { wch: 8 }, { wch: 15 }, { wch: 15 }, { wch: 15 },
+            ];
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Buku Kas");
+
+            const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+            const data = Array.from(new Uint8Array(wbOut));
+
+            const savedPath: string = await invoke("save_file", { fileName, data });
+            const folderPath = savedPath.substring(0, savedPath.lastIndexOf("\\"));
+
+            setToast({
+                show: true,
+                message: fileName,
+                filePath: savedPath,
+                folderPath,
+            });
+        } catch (err) {
+            console.error("Export Excel failed:", err);
+            alert(`Gagal export Excel: ${err}`);
+        }
+    };
+
+    // ======== EXPORT PDF ========
+    const handleExportPDF = async () => {
+        try {
+            const fileName = `Buku_Kas_${getTimestamp()}.pdf`;
+            const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+            // Title
+            doc.setFontSize(16);
+            doc.text("LAPORAN BUKU KAS", 14, 15);
+
+            // Subtitle
+            doc.setFontSize(9);
+            doc.setTextColor(100);
+            doc.text(`Filter: ${getFilterLabel()}`, 14, 22);
+            doc.text(`Dicetak: ${new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}`, 14, 27);
+
+            // Summary Block
+            doc.setFontSize(10);
+            doc.setTextColor(0);
+            const summaryY = 35;
+            doc.text(`Saldo Awal: Rp ${formatPlainCurrency(saldoAwal)}`, 14, summaryY);
+            doc.text(`Total Masuk: Rp ${formatPlainCurrency(totalMasuk)}`, 80, summaryY);
+            doc.text(`Total Keluar: Rp ${formatPlainCurrency(totalKeluar)}`, 150, summaryY);
+            doc.text(`Saldo Akhir: Rp ${formatPlainCurrency(saldoAkhir)}`, 220, summaryY);
+
+            // Table Data
+            const tableData = entriesWithBalance.map((e) => [
+                e.tanggal?.slice(0, 10) || "-",
+                e.noRef,
+                e.customer,
+                e.motor,
+                e.keterangan,
+                e.metode,
+                e.tipe === "masuk" ? "Masuk" : "Keluar",
+                e.tipe === "masuk" ? formatPlainCurrency(e.jumlah) : "-",
+                e.tipe === "keluar" ? formatPlainCurrency(e.jumlah) : "-",
+                formatPlainCurrency(e.saldo),
+            ]);
+
+            // Add saldo awal row
+            if (saldoAwal > 0) {
+                tableData.push([
+                    "-", "INIT", "-", "-", "Saldo Awal", "-", "Saldo",
+                    formatPlainCurrency(saldoAwal), "-",
+                    formatPlainCurrency(saldoAwal),
+                ]);
+            }
+
+            // Total Row
+            tableData.push([
+                "", "", "", "", "", "", "TOTAL",
+                formatPlainCurrency(totalMasuk),
+                formatPlainCurrency(totalKeluar),
+                formatPlainCurrency(saldoAkhir),
+            ]);
+
+            autoTable(doc, {
+                startY: 42,
+                head: [[
+                    "Tanggal", "No. Ref", "Customer", "Motor",
+                    "Keterangan", "Metode", "Tipe", "Masuk", "Keluar", "Saldo",
+                ]],
+                body: tableData,
+                styles: { fontSize: 8, cellPadding: 2 },
+                headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: "bold" },
+                columnStyles: {
+                    7: { halign: "right" },
+                    8: { halign: "right" },
+                    9: { halign: "right", fontStyle: "bold" },
+                },
+                didParseCell: (data) => {
+                    const row = data.row.index;
+                    // Check if last row (Total)
+                    if (row === tableData.length - 1) {
+                        data.cell.styles.fontStyle = "bold";
+                        data.cell.styles.fillColor = [240, 240, 240];
+                    }
+                },
+            });
+
+            const pdfOutput = doc.output("arraybuffer");
+            const data = Array.from(new Uint8Array(pdfOutput));
+
+            const savedPath: string = await invoke("save_file", { fileName, data });
+            const folderPath = savedPath.substring(0, savedPath.lastIndexOf("\\"));
+
+            setToast({
+                show: true,
+                message: fileName,
+                filePath: savedPath,
+                folderPath,
+            });
+        } catch (err) {
+            console.error("Export PDF failed:", err);
+            alert(`Gagal export PDF: ${err}`);
+        }
+    };
     if (loading) {
         return (
             <div className="flex items-center justify-center p-12">
@@ -194,6 +410,34 @@ export default function KasList() {
 
     return (
         <div className="space-y-4">
+            {/* Toast Notification */}
+            {toast.show && (
+                <div className="fixed bottom-6 right-6 z-50" style={{ animation: "slideUp 0.3s ease-out" }}>
+                    <div className="bg-slate-800 border border-green-600/50 rounded-xl shadow-2xl shadow-green-900/20 p-4 flex items-start gap-3 max-w-sm">
+                        <div className="p-1.5 bg-green-500/20 rounded-lg shrink-0 mt-0.5">
+                            <CheckCircle size={18} className="text-green-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-200">File berhasil disimpan!</p>
+                            <p className="text-xs text-slate-400 mt-0.5 truncate">{toast.message}</p>
+                            <button
+                                onClick={handleOpenFolder}
+                                className="flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-700/50 rounded-lg text-xs transition"
+                            >
+                                <FolderOpen size={14} />
+                                <span>Buka Folder</span>
+                            </button>
+                        </div>
+                        <button
+                            onClick={() => setToast((t) => ({ ...t, show: false }))}
+                            className="text-slate-500 hover:text-slate-300 transition shrink-0"
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Saldo Minus Warning */}
             {hasSaldoMinus && (
                 <div className="flex items-center gap-3 p-4 bg-red-900/20 border border-red-700/50 rounded-xl">
@@ -284,6 +528,26 @@ export default function KasList() {
 
                     {/* Filters */}
                     <div className="flex flex-wrap items-center gap-3">
+                        {/* Export Buttons */}
+                        <div className="flex items-center gap-2 mr-2">
+                            <button
+                                onClick={handleExportExcel}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-700 rounded-lg text-sm transition"
+                                title="Export Excel"
+                            >
+                                <FileSpreadsheet size={16} />
+                                <span>Excel</span>
+                            </button>
+                            <button
+                                onClick={handleExportPDF}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-700 rounded-lg text-sm transition"
+                                title="Export PDF"
+                            >
+                                <FileText size={16} />
+                                <span>PDF</span>
+                            </button>
+                        </div>
+
                         {/* Akun Filter */}
                         <div className="flex items-center gap-2 px-3 py-2 bg-purple-500/10 border border-purple-700/40 rounded-lg">
                             <Filter size={16} className="text-purple-400" />
@@ -379,10 +643,10 @@ export default function KasList() {
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <span className={`text-xs font-medium px-2 py-1 rounded ${getAkunCategory(entry.metode) === "Bank"
-                                                            ? "bg-sky-900/40 text-sky-300"
-                                                            : getAkunCategory(entry.metode) === "E-Wallet"
-                                                                ? "bg-violet-900/40 text-violet-300"
-                                                                : "bg-slate-700/50 text-slate-300"
+                                                        ? "bg-sky-900/40 text-sky-300"
+                                                        : getAkunCategory(entry.metode) === "E-Wallet"
+                                                            ? "bg-violet-900/40 text-violet-300"
+                                                            : "bg-slate-700/50 text-slate-300"
                                                         }`}>
                                                         {entry.metode}
                                                     </span>
@@ -405,10 +669,10 @@ export default function KasList() {
                                                     {entry.tipe === "keluar" ? formatCurrency(entry.jumlah) : "-"}
                                                 </td>
                                                 <td className={`px-4 py-3 text-right font-medium ${isSaldoMinus
-                                                        ? "text-red-400 font-bold"
-                                                        : isLast
-                                                            ? "text-slate-300"
-                                                            : "text-slate-400"
+                                                    ? "text-red-400 font-bold"
+                                                    : isLast
+                                                        ? "text-slate-300"
+                                                        : "text-slate-400"
                                                     }`}>
                                                     {formatCurrency(entry.saldo)}
                                                 </td>

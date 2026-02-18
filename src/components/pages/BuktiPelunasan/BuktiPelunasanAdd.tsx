@@ -98,7 +98,7 @@ export default function BuktiPelunasanAdd() {
         setBukti({
             ...bukti,
             transaksi_id: transaksiId,
-            jumlah_bayar: transaksi?.total_bayar ?? 0,
+            jumlah_bayar: (transaksi?.total_bayar ?? 0) + (transaksi?.denda ?? 0),
         });
     };
 

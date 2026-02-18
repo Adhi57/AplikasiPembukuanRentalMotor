@@ -5,7 +5,7 @@ use std::fs;
 use std::path::PathBuf;
 
 // Fungsi untuk mendapatkan path database
-fn get_db_path() -> PathBuf {
+pub fn get_db_path() -> PathBuf {
     let mut path = PathBuf::from(std::env::var("APPDATA").expect("APPDATA not found"));
 
     path.push("AplikasiPembukuan");

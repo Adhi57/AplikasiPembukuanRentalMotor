@@ -11,6 +11,8 @@ fn main() {
     migrations::init_db().expect("init db gagal");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             handlers::motor::get_all_motor,
             handlers::motor::create_motor,
@@ -43,6 +45,9 @@ fn main() {
             commands::open_folder,
             commands::save_file,
             commands::get_downloads_path,
+            commands::get_db_path_string,
+            commands::backup_database,
+            commands::import_database,
             handlers::pengaturan::get_pengaturan,
             handlers::pengaturan::set_pengaturan,
         ])

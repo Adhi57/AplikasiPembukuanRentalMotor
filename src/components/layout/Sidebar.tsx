@@ -86,13 +86,13 @@ const menuGroups: MenuGroup[] = [
 
 export default function Sidebar() {
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 border-r-2 border-zinc-600 text-slate-100 shadow-xl">
+    <aside className="fixed left-0 top-0 h-screen w-64 border-r-2 border-zinc-600 text-slate-100 shadow-xl flex flex-col">
       {/* Logo */}
       <div className="h-16 flex items-center gap-2 px-6 text-lg font-bold">
         Aplikasi Rental Motor
       </div>
 
-      <nav className="p-4 space-y-4">
+      <nav className="p-4 space-y-4 flex-1 overflow-y-auto scrollbar-hide">
         {/* Dashboard */}
         <NavLink
           to="/"
@@ -140,7 +140,7 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="absolute bottom-0 left-0 w-full px-6 py-4 border-t border-slate-700">
+      <div className="px-6 py-4 border-t border-slate-700">
         <p className="text-xs text-slate-500 text-center">Developed by <a href="https://www.instagram.com/hawkware.smg/" target="_blank" rel="noopener noreferrer" className="text-slate-400 font-medium hover:text-blue-400 transition">@hawkware.smg</a></p>
       </div>
     </aside>
