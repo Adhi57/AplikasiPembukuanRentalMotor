@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 
 import Button from "../../ui/Button";
 import Input from "../../ui/Input";
+import Select from "../../ui/Select";
 
 export default function PengeluaranRentalAdd() {
     const navigate = useNavigate();
@@ -17,6 +18,7 @@ export default function PengeluaranRentalAdd() {
         jenis: "",
         nominal: "",
         keterangan: "",
+        sumber_dana: "Kas",
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -38,6 +40,7 @@ export default function PengeluaranRentalAdd() {
                     jenis: formData.jenis,
                     nominal: parseFloat(formData.nominal),
                     keterangan: formData.keterangan,
+                    sumber_dana: formData.sumber_dana,
                 },
             });
 
@@ -95,6 +98,19 @@ export default function PengeluaranRentalAdd() {
                             value={formData.nominal}
                             onChange={handleChange}
                             placeholder="Contoh: 50000"
+                            required
+                        />
+
+                        <Select
+                            label="Sumber Dana"
+                            name="sumber_dana"
+                            value={formData.sumber_dana}
+                            onChange={handleChange}
+                            options={[
+                                { value: "Kas", label: "Kas (Tunai)" },
+                                { value: "Bank", label: "Bank (Transfer)" },
+                                { value: "E-Wallet", label: "E-Wallet / QRIS" },
+                            ]}
                             required
                         />
 

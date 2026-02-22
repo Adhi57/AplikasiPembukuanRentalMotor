@@ -13,11 +13,20 @@ import {
     Database,
     XCircle,
     Info,
+    Tag,
+    Percent,
+    Calendar,
 } from "lucide-react";
 
 export default function Pengaturan() {
     const [dendaPerHari, setDendaPerHari] = useState<string>("0");
-    const [saldoAwal, setSaldoAwal] = useState<string>("0");
+    const [saldoAwalKas, setSaldoAwalKas] = useState<string>("0");
+    const [saldoAwalBank, setSaldoAwalBank] = useState<string>("0");
+    const [saldoAwalEwallet, setSaldoAwalEwallet] = useState<string>("0");
+    const [diskonAktif, setDiskonAktif] = useState(false);
+    const [diskonPersen, setDiskonPersen] = useState<string>("0");
+    const [diskonMulai, setDiskonMulai] = useState<string>("");
+    const [diskonBerakhir, setDiskonBerakhir] = useState<string>("");
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState<string | null>(null);
     const [toast, setToast] = useState<{
@@ -46,12 +55,24 @@ export default function Pengaturan() {
     const fetchSettings = async () => {
         try {
             setLoading(true);
-            const [denda, saldo] = await Promise.all([
+            const [denda, kas, bank, ewallet, dPersen, dMulai, dBerakhir, dAktif] = await Promise.all([
                 invoke<string>("get_pengaturan", { key: "denda_per_hari" }),
-                invoke<string>("get_pengaturan", { key: "saldo_awal" }),
+                invoke<string>("get_pengaturan", { key: "saldo_awal_kas" }),
+                invoke<string>("get_pengaturan", { key: "saldo_awal_bank" }),
+                invoke<string>("get_pengaturan", { key: "saldo_awal_ewallet" }),
+                invoke<string>("get_pengaturan", { key: "diskon_persen" }),
+                invoke<string>("get_pengaturan", { key: "diskon_tanggal_mulai" }),
+                invoke<string>("get_pengaturan", { key: "diskon_tanggal_berakhir" }),
+                invoke<string>("get_pengaturan", { key: "diskon_aktif" }),
             ]);
             setDendaPerHari(denda || "0");
-            setSaldoAwal(saldo || "0");
+            setSaldoAwalKas(kas || "0");
+            setSaldoAwalBank(bank || "0");
+            setSaldoAwalEwallet(ewallet || "0");
+            setDiskonPersen(dPersen || "0");
+            setDiskonMulai(dMulai || "");
+            setDiskonBerakhir(dBerakhir || "");
+            setDiskonAktif(dAktif === "1");
         } catch (err) {
             console.error("Failed to fetch settings:", err);
         } finally {
@@ -86,6 +107,55 @@ export default function Pengaturan() {
             setSaving(null);
         }
     };
+
+    const saveDiskon = async () => {
+        try {
+            setSaving("diskon");
+            await Promise.all([
+                invoke("set_pengaturan", {
+                    key: "diskon_persen",
+                    value: (parseInt(diskonPersen.replace(/\D/g, "")) || 0).toString(),
+                    keterangan: "Persentase Diskon",
+                }),
+                invoke("set_pengaturan", {
+                    key: "diskon_tanggal_mulai",
+                    value: diskonMulai,
+                    keterangan: "Tanggal Mulai Diskon",
+                }),
+                invoke("set_pengaturan", {
+                    key: "diskon_tanggal_berakhir",
+                    value: diskonBerakhir,
+                    keterangan: "Tanggal Berakhir Diskon",
+                }),
+                invoke("set_pengaturan", {
+                    key: "diskon_aktif",
+                    value: diskonAktif ? "1" : "0",
+                    keterangan: "Status Diskon Aktif",
+                }),
+            ]);
+            setToast({
+                show: true,
+                message: "Pengaturan diskon berhasil disimpan",
+                type: "success",
+            });
+        } catch (err) {
+            console.error("Failed to save diskon:", err);
+            setToast({
+                show: true,
+                message: `Gagal menyimpan diskon: ${err}`,
+                type: "error",
+            });
+        } finally {
+            setSaving(null);
+        }
+    };
+
+    // Check if discount is currently active based on today's date
+    const isDiskonBerlaku = (() => {
+        if (!diskonAktif || !diskonMulai || !diskonBerakhir) return false;
+        const today = new Date().toISOString().split("T")[0];
+        return today >= diskonMulai && today <= diskonBerakhir;
+    })();
 
     const handleBackup = async () => {
         try {
@@ -230,42 +300,94 @@ export default function Pengaturan() {
                     </div>
                 </div>
                 <div className="p-5 space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">
-                            Saldo Awal (Rp)
-                        </label>
-                        <div className="relative max-w-sm">
-                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">
-                                Rp
-                            </span>
-                            <input
-                                type="text"
-                                value={formatInputCurrency(saldoAwal)}
-                                onChange={(e) =>
-                                    setSaldoAwal(
-                                        e.target.value.replace(/\D/g, "")
-                                    )
-                                }
-                                className="w-full bg-slate-900 border border-slate-600 rounded-lg pl-12 pr-4 py-3 text-lg font-semibold text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition"
-                                placeholder="0"
-                            />
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Kas */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">
+                                Saldo Awal KAS
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">
+                                    Rp
+                                </span>
+                                <input
+                                    type="text"
+                                    value={formatInputCurrency(saldoAwalKas)}
+                                    onChange={(e) =>
+                                        setSaldoAwalKas(
+                                            e.target.value.replace(/\D/g, "")
+                                        )
+                                    }
+                                    className="w-full bg-slate-900 border border-slate-600 rounded-lg pl-12 pr-4 py-3 text-lg font-semibold text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition"
+                                    placeholder="0"
+                                />
+                            </div>
                         </div>
-                        <p className="text-xs text-slate-500 mt-2">
-                            Saldo ini akan ditambahkan sebagai nilai awal pada
-                            Buku Kas.
-                        </p>
+
+                        {/* Bank */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">
+                                Saldo Awal BANK
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">
+                                    Rp
+                                </span>
+                                <input
+                                    type="text"
+                                    value={formatInputCurrency(saldoAwalBank)}
+                                    onChange={(e) =>
+                                        setSaldoAwalBank(
+                                            e.target.value.replace(/\D/g, "")
+                                        )
+                                    }
+                                    className="w-full bg-slate-900 border border-slate-600 rounded-lg pl-12 pr-4 py-3 text-lg font-semibold text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition"
+                                    placeholder="0"
+                                />
+                            </div>
+                        </div>
+
+                        {/* E-Wallet */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">
+                                Saldo Awal E-WALLET
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">
+                                    Rp
+                                </span>
+                                <input
+                                    type="text"
+                                    value={formatInputCurrency(saldoAwalEwallet)}
+                                    onChange={(e) =>
+                                        setSaldoAwalEwallet(
+                                            e.target.value.replace(/\D/g, "")
+                                        )
+                                    }
+                                    className="w-full bg-slate-900 border border-slate-600 rounded-lg pl-12 pr-4 py-3 text-lg font-semibold text-slate-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition"
+                                    placeholder="0"
+                                />
+                            </div>
+                        </div>
                     </div>
+
+                    <p className="text-xs text-slate-500">
+                        Saldo ini akan ditambahkan sebagai nilai awal pada perhitungan masing-masing akun.
+                    </p>
+
                     <button
-                        onClick={() =>
-                            saveSetting("saldo_awal", saldoAwal, "Saldo Awal")
-                        }
-                        disabled={saving === "saldo_awal"}
+                        onClick={async () => {
+                            await saveSetting("saldo_awal_kas", saldoAwalKas, "Saldo Awal Kas");
+                            await saveSetting("saldo_awal_bank", saldoAwalBank, "Saldo Awal Bank");
+                            await saveSetting("saldo_awal_ewallet", saldoAwalEwallet, "Saldo Awal E-Wallet");
+                        }}
+                        disabled={saving?.startsWith("saldo_awal")}
                         className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition disabled:opacity-50"
                     >
                         <Save size={16} />
-                        {saving === "saldo_awal"
+                        {saving && saving.startsWith("saldo_awal")
                             ? "Menyimpan..."
-                            : "Simpan Saldo Awal"}
+                            : "Simpan Semua Saldo"}
                     </button>
                 </div>
             </div>
@@ -331,6 +453,146 @@ export default function Pengaturan() {
                         {saving === "denda_per_hari"
                             ? "Menyimpan..."
                             : "Simpan Denda"}
+                    </button>
+                </div>
+            </div>
+
+            {/* Pengaturan Diskon */}
+            <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+                <div className="p-5 border-b border-slate-700">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-purple-500/10 rounded-lg">
+                                <Tag size={20} className="text-purple-400" />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold text-slate-100">
+                                    Pengaturan Diskon
+                                </h2>
+                                <p className="text-sm text-slate-400">
+                                    Atur diskon harga sewa dengan rentang waktu tertentu
+                                </p>
+                            </div>
+                        </div>
+                        {/* Status Badge */}
+                        {diskonAktif && (
+                            <span
+                                className={`px-3 py-1 rounded-full text-xs font-semibold ${isDiskonBerlaku
+                                        ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                                        : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                    }`}
+                            >
+                                {isDiskonBerlaku ? "● Sedang Berlaku" : "● Belum/Sudah Berakhir"}
+                            </span>
+                        )}
+                    </div>
+                </div>
+                <div className="p-5 space-y-5">
+                    {/* Toggle Aktif */}
+                    <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-lg border border-slate-700/50">
+                        <div className="flex items-center gap-3">
+                            <div className={`p-1.5 rounded-lg ${diskonAktif ? 'bg-purple-500/20' : 'bg-slate-700/50'}`}>
+                                <Percent size={16} className={diskonAktif ? 'text-purple-400' : 'text-slate-500'} />
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-slate-200">Aktifkan Diskon</p>
+                                <p className="text-xs text-slate-500">Diskon akan diterapkan otomatis pada transaksi baru</p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setDiskonAktif(!diskonAktif)}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${diskonAktif ? 'bg-purple-600' : 'bg-slate-600'
+                                }`}
+                        >
+                            <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${diskonAktif ? 'translate-x-6' : 'translate-x-1'
+                                    }`}
+                            />
+                        </button>
+                    </div>
+
+                    {/* Diskon Fields */}
+                    <div className={`space-y-4 transition-opacity duration-200 ${diskonAktif ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                        {/* Persentase Diskon */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">
+                                Persentase Diskon
+                            </label>
+                            <div className="relative max-w-xs">
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={diskonPersen}
+                                    onChange={(e) => {
+                                        const val = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
+                                        setDiskonPersen(val.toString());
+                                    }}
+                                    className="w-full bg-slate-900 border border-slate-600 rounded-lg pl-4 pr-12 py-3 text-lg font-semibold text-slate-100 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 focus:outline-none transition"
+                                    placeholder="0"
+                                />
+                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">
+                                    %
+                                </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-2">
+                                Masukkan persentase potongan harga (1-100%)
+                            </p>
+                        </div>
+
+                        {/* Rentang Waktu */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">
+                                    <span className="flex items-center gap-1.5">
+                                        <Calendar size={14} className="text-purple-400" />
+                                        Tanggal Mulai
+                                    </span>
+                                </label>
+                                <input
+                                    type="date"
+                                    value={diskonMulai}
+                                    onChange={(e) => setDiskonMulai(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-3 text-sm text-slate-100 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 focus:outline-none transition"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">
+                                    <span className="flex items-center gap-1.5">
+                                        <Calendar size={14} className="text-purple-400" />
+                                        Tanggal Berakhir
+                                    </span>
+                                </label>
+                                <input
+                                    type="date"
+                                    value={diskonBerakhir}
+                                    onChange={(e) => setDiskonBerakhir(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-600 rounded-lg px-4 py-3 text-sm text-slate-100 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 focus:outline-none transition"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Preview diskon */}
+                        {diskonAktif && parseInt(diskonPersen) > 0 && diskonMulai && diskonBerakhir && (
+                            <div className="p-3.5 bg-purple-500/5 border border-purple-600/30 rounded-lg">
+                                <p className="text-sm text-purple-200/90 leading-relaxed">
+                                    <strong>Ringkasan:</strong> Diskon <strong>{diskonPersen}%</strong> berlaku dari{" "}
+                                    <strong>{new Date(diskonMulai).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</strong>
+                                    {" "}s/d{" "}
+                                    <strong>{new Date(diskonBerakhir).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</strong>
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
+                    <button
+                        onClick={saveDiskon}
+                        disabled={saving === "diskon"}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-medium transition disabled:opacity-50 shadow-lg shadow-purple-500/10"
+                    >
+                        <Save size={16} />
+                        {saving === "diskon" ? "Menyimpan..." : "Simpan Diskon"}
                     </button>
                 </div>
             </div>

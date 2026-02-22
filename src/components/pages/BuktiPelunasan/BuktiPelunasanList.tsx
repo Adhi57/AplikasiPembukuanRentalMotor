@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Link } from "react-router-dom";
-import { Plus, Search, Calendar, User, Receipt } from "lucide-react";
+import { Plus, Search, Calendar, User, Receipt, FileSpreadsheet, FileText, CheckCircle, FolderOpen, X } from "lucide-react";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 import { BuktiPelunasan } from "../../../types/bukti_pelunasan.type";
 import { Transaksi } from "../../../types/transaksi.type";
@@ -15,6 +18,7 @@ const METODE_OPTIONS = [
     { value: "semua", label: "Semua Metode" },
     { value: "tunai", label: "Tunai" },
     { value: "transfer", label: "Transfer" },
+    { value: "ewallet", label: "E-Wallet" },
 ];
 
 export default function BuktiPelunasanList() {
@@ -26,10 +30,23 @@ export default function BuktiPelunasanList() {
     const [metodeFilter, setMetodeFilter] = useState("semua");
     const [bulanFilter, setBulanFilter] = useState("");
     const [loading, setLoading] = useState(true);
+    const [toast, setToast] = useState<{ show: boolean; message: string; filePath: string; folderPath: string }>({
+        show: false,
+        message: "",
+        filePath: "",
+        folderPath: "",
+    });
 
     useEffect(() => {
         fetchData();
     }, []);
+
+    useEffect(() => {
+        if (toast.show) {
+            const timer = setTimeout(() => setToast((t) => ({ ...t, show: false })), 8000);
+            return () => clearTimeout(timer);
+        }
+    }, [toast.show]);
 
     const fetchData = async () => {
         try {
@@ -39,7 +56,7 @@ export default function BuktiPelunasanList() {
                 TransaksiService.getAll(),
                 PenyewaService.getAll(),
             ]);
-            setBuktiList(b);
+            setBuktiList(b.sort((a, b) => b.bukti_id - a.bukti_id));
             setTransaksiList(t);
             setPenyewaList(p);
         } catch (err) {
@@ -49,8 +66,12 @@ export default function BuktiPelunasanList() {
         }
     };
 
+    const getTransaksi = (transaksiId: number) => {
+        return transaksiList.find((t) => t.transaksi_id === transaksiId) || null;
+    };
+
     const getPenyewaName = (transaksiId: number) => {
-        const trx = transaksiList.find((t) => t.transaksi_id === transaksiId);
+        const trx = getTransaksi(transaksiId);
         if (!trx) return "-";
         const penyewa = penyewaList.find((p) => p.penyewa_id === trx.penyewa_id);
         return penyewa ? penyewa.nama : `Penyewa #${trx.penyewa_id}`;
@@ -64,6 +85,107 @@ export default function BuktiPelunasanList() {
             fetchData();
         } catch (err) {
             console.error("Failed to delete bukti_pelunasan:", err);
+        }
+    };
+
+    const handleOpenFolder = async () => {
+        try {
+            await invoke("open_folder", { path: toast.folderPath });
+        } catch (err) {
+            console.error("Failed to open folder:", err);
+        }
+    };
+
+    // ======== EXPORT EXCEL ========
+    const exportExcel = async () => {
+        try {
+            const now = new Date();
+            const ts = `${now.toISOString().slice(0, 10)}_${now.getHours().toString().padStart(2, "0")}${now.getMinutes().toString().padStart(2, "0")}${now.getSeconds().toString().padStart(2, "0")}`;
+            const fileName = `Bukti_Pelunasan_${ts}.xlsx`;
+            const rows: any[][] = [];
+            rows.push(["Laporan Bukti Pelunasan"]);
+            rows.push([]);
+            rows.push(["No", "ID", "Trx ID", "Penyewa", "Tgl Bayar", "Wajib Bayar", "Jumlah Bayar", "Kurang", "Metode"]);
+
+            filteredBukti.forEach((b, idx) => {
+                const wajib = getTotalBayarWajib(b.transaksi_id);
+                const kurang = getKurang(b);
+                rows.push([
+                    idx + 1,
+                    b.bukti_id,
+                    b.transaksi_id,
+                    getPenyewaName(b.transaksi_id),
+                    b.tanggal_bayar,
+                    wajib,
+                    b.jumlah_bayar,
+                    kurang > 0 ? kurang : 0,
+                    b.metode_bayar
+                ]);
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(rows);
+            ws["!cols"] = [{ wch: 5 }, { wch: 5 }, { wch: 8 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "BuktiPelunasan");
+
+            const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+            const data = Array.from(new Uint8Array(wbOut));
+            const savedPath: string = await invoke("save_file", { fileName, data });
+            const folderPath = savedPath.substring(0, savedPath.lastIndexOf("\\"));
+
+            setToast({ show: true, message: fileName, filePath: savedPath, folderPath });
+        } catch (err) {
+            console.error("Export Excel failed:", err);
+            alert("Gagal mengekspor Excel");
+        }
+    };
+
+    // ======== EXPORT PDF ========
+    const exportPDF = async () => {
+        try {
+            const now = new Date();
+            const ts = `${now.toISOString().slice(0, 10)}_${now.getHours().toString().padStart(2, "0")}${now.getMinutes().toString().padStart(2, "0")}${now.getSeconds().toString().padStart(2, "0")}`;
+            const fileName = `Bukti_Pelunasan_${ts}.pdf`;
+            const doc = new jsPDF({ orientation: "landscape" });
+
+            doc.setFontSize(16);
+            doc.text("Laporan Bukti Pelunasan", 14, 20);
+            doc.setFontSize(10);
+            doc.text(`Dicetak: ${new Date().toLocaleDateString("id-ID")}`, 14, 27);
+
+            const tableRows = filteredBukti.map((b, idx) => {
+                const wajib = getTotalBayarWajib(b.transaksi_id);
+                const kurang = getKurang(b);
+                return [
+                    idx + 1,
+                    b.bukti_id,
+                    b.transaksi_id,
+                    getPenyewaName(b.transaksi_id),
+                    b.tanggal_bayar,
+                    wajib.toLocaleString("id-ID"),
+                    b.jumlah_bayar.toLocaleString("id-ID"),
+                    (kurang > 0 ? kurang : 0).toLocaleString("id-ID"),
+                    b.metode_bayar
+                ];
+            });
+
+            autoTable(doc, {
+                startY: 32,
+                head: [["No", "ID", "Trx ID", "Penyewa", "Tgl Bayar", "Wajib", "Bayar", "Kurang", "Metode"]],
+                body: tableRows,
+                styles: { fontSize: 8 },
+                headStyles: { fillColor: [30, 41, 59] },
+            });
+
+            const pdfOutput = doc.output("arraybuffer");
+            const data = Array.from(new Uint8Array(pdfOutput));
+            const savedPath: string = await invoke("save_file", { fileName, data });
+            const folderPath = savedPath.substring(0, savedPath.lastIndexOf("\\"));
+
+            setToast({ show: true, message: fileName, filePath: savedPath, folderPath });
+        } catch (err) {
+            console.error("Export PDF failed:", err);
+            alert("Gagal mengekspor PDF");
         }
     };
 
@@ -81,6 +203,8 @@ export default function BuktiPelunasanList() {
         const map: Record<string, string> = {
             tunai: "bg-green-900 text-green-200",
             transfer: "bg-blue-900 text-blue-200",
+            ewallet: "bg-purple-900 text-purple-200",
+            qris: "bg-purple-900 text-purple-200",
         };
 
         return (
@@ -90,10 +214,44 @@ export default function BuktiPelunasanList() {
         );
     };
 
+
+    const getTotalBayarWajib = (transaksiId: number) => {
+        const trx = getTransaksi(transaksiId);
+        return (trx?.total_bayar ?? 0) + (trx?.denda ?? 0);
+    };
+
+    const getKurang = (bukti: BuktiPelunasan) => {
+        const totalWajib = getTotalBayarWajib(bukti.transaksi_id);
+        return totalWajib - bukti.jumlah_bayar;
+    };
+
+    const statusLunasBadge = (bukti: BuktiPelunasan) => {
+        const kurang = getKurang(bukti);
+        if (kurang <= 0) {
+            return (
+                <span className="px-2 py-1 rounded text-xs font-semibold bg-green-900 text-green-200">
+                    Lunas
+                </span>
+            );
+        }
+        return (
+            <span className="px-2 py-1 rounded text-xs font-semibold bg-red-900 text-red-200">
+                Belum Lunas
+            </span>
+        );
+    };
+
     // Filter logic
     const filteredBukti = buktiList.filter((b) => {
         // Metode filter
-        if (metodeFilter !== "semua" && b.metode_bayar.toLowerCase() !== metodeFilter) return false;
+        if (metodeFilter !== "semua") {
+            const method = b.metode_bayar.toLowerCase();
+            if (metodeFilter === "ewallet") {
+                if (method !== "ewallet" && method !== "qris") return false;
+            } else if (method !== metodeFilter) {
+                return false;
+            }
+        }
 
         // Bulan filter (format: "YYYY-MM")
         if (bulanFilter && !b.tanggal_bayar.startsWith(bulanFilter)) return false;
@@ -119,6 +277,10 @@ export default function BuktiPelunasanList() {
         semua: buktiList.length,
         tunai: buktiList.filter(b => b.metode_bayar.toLowerCase() === "tunai").length,
         transfer: buktiList.filter(b => b.metode_bayar.toLowerCase() === "transfer").length,
+        ewallet: buktiList.filter(b => {
+            const method = b.metode_bayar.toLowerCase();
+            return method === "ewallet" || method === "qris";
+        }).length,
     };
 
     // Total jumlah for filtered results
@@ -160,6 +322,13 @@ export default function BuktiPelunasanList() {
             accessor: "tanggal_bayar" as const,
         },
         {
+            header: "Total Bayar",
+            accessor: "transaksi_id" as const,
+            render: (transaksiId: number) => (
+                <span className="text-amber-400 font-medium">{formatCurrency(getTotalBayarWajib(transaksiId))}</span>
+            ),
+        },
+        {
             header: "Jumlah Bayar",
             accessor: "jumlah_bayar" as const,
             render: (value: number) => (
@@ -167,9 +336,26 @@ export default function BuktiPelunasanList() {
             ),
         },
         {
+            header: "Kurang",
+            accessor: "bukti_id" as const,
+            render: (_: any, row: BuktiPelunasan) => {
+                const kurang = getKurang(row);
+                return (
+                    <span className={`font-medium ${kurang > 0 ? "text-red-400" : "text-green-400"}`}>
+                        {formatCurrency(kurang > 0 ? kurang : 0)}
+                    </span>
+                );
+            },
+        },
+        {
             header: "Metode Bayar",
             accessor: "metode_bayar" as const,
             render: (value: string) => metodeBadge(value),
+        },
+        {
+            header: "Status",
+            accessor: "bukti_id" as const,
+            render: (_: any, row: BuktiPelunasan) => statusLunasBadge(row),
         },
         {
             header: "Detail",
@@ -233,11 +419,31 @@ export default function BuktiPelunasanList() {
                         />
                     </div>
 
-                    <Button
-                        label="Tambah Bukti Pelunasan"
-                        icon={<Plus size={16} />}
-                        href="/bukti_pelunasan/tambah"
-                    />
+                    <div className="flex items-center gap-2">
+                        <div className="flex gap-2">
+                            <button
+                                onClick={exportExcel}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-700 rounded-lg text-sm transition"
+                                title="Export Excel"
+                            >
+                                <FileSpreadsheet size={16} />
+                                <span className="hidden sm:inline">Excel</span>
+                            </button>
+                            <button
+                                onClick={exportPDF}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-700 rounded-lg text-sm transition"
+                                title="Export PDF"
+                            >
+                                <FileText size={16} />
+                                <span className="hidden sm:inline">PDF</span>
+                            </button>
+                        </div>
+                        <Button
+                            label="Tambah"
+                            icon={<Plus size={16} />}
+                            href="/bukti_pelunasan/tambah"
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -257,7 +463,9 @@ export default function BuktiPelunasanList() {
                                         ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50"
                                         : opt.value === "transfer"
                                             ? "bg-blue-500/20 text-blue-300 border border-blue-500/50"
-                                            : "bg-slate-600 text-slate-200 border border-slate-500"
+                                            : opt.value === "ewallet"
+                                                ? "bg-purple-500/20 text-purple-300 border border-purple-500/50"
+                                                : "bg-slate-600 text-slate-200 border border-slate-500"
                                     : "bg-slate-700/50 text-slate-400 border border-slate-700 hover:bg-slate-700 hover:text-slate-200"
                                     }`}
                             >
@@ -302,6 +510,34 @@ export default function BuktiPelunasanList() {
                 <div className="p-8 text-center text-slate-400">Memuat data...</div>
             ) : (
                 <Table data={filteredBukti} columns={columns} />
+            )}
+
+            {/* Toast Notification */}
+            {toast.show && (
+                <div className="fixed bottom-6 right-6 z-50">
+                    <div className="bg-slate-800 border border-green-600/50 rounded-xl shadow-2xl shadow-green-900/20 p-4 flex items-start gap-3 max-w-sm">
+                        <div className="p-1.5 bg-green-500/20 rounded-lg shrink-0 mt-0.5">
+                            <CheckCircle size={18} className="text-green-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-200">File berhasil disimpan!</p>
+                            <p className="text-xs text-slate-400 mt-0.5 truncate">{toast.message}</p>
+                            <button
+                                onClick={handleOpenFolder}
+                                className="flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-700/50 rounded-lg text-xs transition"
+                            >
+                                <FolderOpen size={14} />
+                                <span>Buka Folder</span>
+                            </button>
+                        </div>
+                        <button
+                            onClick={() => setToast((t) => ({ ...t, show: false }))}
+                            className="text-slate-500 hover:text-slate-300 transition shrink-0"
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );

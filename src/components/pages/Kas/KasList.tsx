@@ -58,8 +58,10 @@ export default function KasList() {
         folderPath: "",
     });
 
-    // Saldo Awal
-    const [saldoAwal, setSaldoAwal] = useState<number>(0);
+    // Saldo Awal per Akun
+    const [saldoAwalKas, setSaldoAwalKas] = useState<number>(0);
+    const [saldoAwalBank, setSaldoAwalBank] = useState<number>(0);
+    const [saldoAwalEwallet, setSaldoAwalEwallet] = useState<number>(0);
 
     const navigate = useNavigate();
 
@@ -70,20 +72,24 @@ export default function KasList() {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [b, p, t, m, py, saldo] = await Promise.all([
+            const [b, p, t, m, py, sKas, sBank, sEwallet] = await Promise.all([
                 invoke<BuktiPelunasan[]>("get_all_bukti_pelunasan"),
                 invoke<PengeluaranRental[]>("get_all_pengeluaran_rental"),
                 TransaksiService.getAll(),
                 getMotor(),
                 PenyewaService.getAll(),
-                invoke<string>("get_pengaturan", { key: "saldo_awal" }),
+                invoke<string>("get_pengaturan", { key: "saldo_awal_kas" }),
+                invoke<string>("get_pengaturan", { key: "saldo_awal_bank" }),
+                invoke<string>("get_pengaturan", { key: "saldo_awal_ewallet" }),
             ]);
             setBuktiList(b);
             setPengeluaranList(p);
             setTransaksiList(t);
             setMotors(m);
             setPenyewas(py);
-            setSaldoAwal(saldo ? parseInt(saldo) || 0 : 0);
+            setSaldoAwalKas(sKas ? parseInt(sKas) || 0 : 0);
+            setSaldoAwalBank(sBank ? parseInt(sBank) || 0 : 0);
+            setSaldoAwalEwallet(sEwallet ? parseInt(sEwallet) || 0 : 0);
         } catch (err) {
             console.error("Failed to fetch data:", err);
         } finally {
@@ -109,6 +115,10 @@ export default function KasList() {
         }).format(amount);
     };
 
+    const formatPlainCurrency = (amount: number) => {
+        return new Intl.NumberFormat("id-ID").format(amount);
+    };
+
     const getMonthLabel = (ym: string) => {
         try {
             const [y, m] = ym.split("-");
@@ -129,9 +139,12 @@ export default function KasList() {
 
     // Build unified kas entries with full reference info
     const allEntries: KasEntry[] = [
-        ...buktiList.map((b) => {
+        ...buktiList.flatMap((b) => {
             const trx = transaksiList.find((t) => t.transaksi_id === b.transaksi_id);
-            return {
+            const entries: KasEntry[] = [];
+
+            // Add payment entry
+            entries.push({
                 id: b.bukti_id,
                 tanggal: b.tanggal_bayar,
                 noRef: `TRX-${String(b.transaksi_id).padStart(4, "0")}`,
@@ -140,8 +153,27 @@ export default function KasList() {
                 metode: b.metode_bayar || "Kas",
                 keterangan: `Pelunasan Transaksi #${b.transaksi_id}`,
                 tipe: "masuk" as const,
-                jumlah: b.jumlah_bayar + (trx && trx.denda ? trx.denda : 0),
-            };
+                jumlah: b.jumlah_bayar,
+            });
+
+            // Check for denda (only once per transaction, tied to the first payment found)
+            // Note: This is a simplification. Ideally denda is its own record.
+            const isFirstPaymentForThisTrx = buktiList.find(bp => bp.transaksi_id === b.transaksi_id)?.bukti_id === b.bukti_id;
+            if (trx && (trx.denda || 0) > 0 && isFirstPaymentForThisTrx) {
+                entries.push({
+                    id: b.bukti_id + 500000, // Safe offset
+                    tanggal: b.tanggal_bayar,
+                    noRef: `DDA-${String(b.transaksi_id).padStart(4, "0")}`,
+                    customer: getPenyewaName(trx.penyewa_id),
+                    motor: getMotorName(trx.motor_id),
+                    metode: b.metode_bayar || "Kas",
+                    keterangan: `Denda Keterlambatan #${b.transaksi_id}`,
+                    tipe: "masuk" as const,
+                    jumlah: trx.denda || 0,
+                });
+            }
+
+            return entries;
         }),
         ...pengeluaranList.map((p) => ({
             id: p.pengeluaran_id + 100000,
@@ -149,7 +181,7 @@ export default function KasList() {
             noRef: `PGL-${String(p.pengeluaran_id).padStart(4, "0")}`,
             customer: "-",
             motor: "-",
-            metode: "Kas",
+            metode: p.sumber_dana || "Kas",
             keterangan: `${p.jenis}${p.keterangan ? " — " + p.keterangan : ""}`,
             tipe: "keluar" as const,
             jumlah: p.nominal,
@@ -171,10 +203,35 @@ export default function KasList() {
     // Sort descending (newest first) — this is the display order
     const sorted = [...filtered].sort((a, b) => b.tanggal.localeCompare(a.tanggal));
 
+    // Determine active Saldo Awal based on account filter
+    const activeSaldoAwal = (() => {
+        if (selectedAkun === "Kas") return saldoAwalKas;
+        if (selectedAkun === "Bank") return saldoAwalBank;
+        if (selectedAkun === "E-Wallet") return saldoAwalEwallet;
+        return saldoAwalKas + saldoAwalBank + saldoAwalEwallet;
+    })();
+
     // Calculate totals
     const totalMasuk = filtered.filter((e) => e.tipe === "masuk").reduce((s, e) => s + e.jumlah, 0);
-    const totalKeluar = filtered.filter((e) => e.tipe === "keluar").reduce((s, e) => s + e.jumlah, 0);
-    const saldoAkhir = saldoAwal + totalMasuk - totalKeluar;
+    const totalKeluar = filtered.reduce((sum, e) => sum + (e.tipe === "keluar" ? e.jumlah : 0), 0);
+    const saldoAkhir = activeSaldoAwal + totalMasuk - totalKeluar;
+
+    // Calculate balances for each account specifically for the current period
+    const statsKas = {
+        masuk: filtered.filter(e => e.tipe === "masuk" && getAkunCategory(e.metode) === "Kas").reduce((s, e) => s + e.jumlah, 0),
+        keluar: filtered.filter(e => e.tipe === "keluar" && getAkunCategory(e.metode) === "Kas").reduce((s, e) => s + e.jumlah, 0),
+        awal: saldoAwalKas
+    };
+    const statsBank = {
+        masuk: filtered.filter(e => e.tipe === "masuk" && getAkunCategory(e.metode) === "Bank").reduce((s, e) => s + e.jumlah, 0),
+        keluar: filtered.filter(e => e.tipe === "keluar" && getAkunCategory(e.metode) === "Bank").reduce((s, e) => s + e.jumlah, 0),
+        awal: saldoAwalBank
+    };
+    const statsEwallet = {
+        masuk: filtered.filter(e => e.tipe === "masuk" && getAkunCategory(e.metode) === "E-Wallet").reduce((s, e) => s + e.jumlah, 0),
+        keluar: filtered.filter(e => e.tipe === "keluar" && getAkunCategory(e.metode) === "E-Wallet").reduce((s, e) => s + e.jumlah, 0),
+        awal: saldoAwalEwallet
+    };
 
     // Check for saldo minus
     const hasSaldoMinus = saldoAkhir < 0;
@@ -218,10 +275,6 @@ export default function KasList() {
         return `${now.toISOString().slice(0, 10)}_${now.getHours().toString().padStart(2, "0")}${now.getMinutes().toString().padStart(2, "0")}${now.getSeconds().toString().padStart(2, "0")}`;
     };
 
-    const formatPlainCurrency = (amount: number) => {
-        return new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(amount);
-    };
-
     const getFilterLabel = () => {
         const parts: string[] = [];
         if (selectedMonth) parts.push(getMonthLabel(selectedMonth));
@@ -241,7 +294,7 @@ export default function KasList() {
             rows.push([]);
 
             // Summary Info
-            rows.push(["Saldo Awal", saldoAwal]);
+            rows.push(["Saldo Awal", activeSaldoAwal]);
             rows.push(["Total Masuk", totalMasuk]);
             rows.push(["Total Keluar", totalKeluar]);
             rows.push(["Saldo Akhir", saldoAkhir]);
@@ -267,8 +320,8 @@ export default function KasList() {
             });
 
             // Add Init Row at bottom if applies
-            if (saldoAwal > 0) {
-                rows.push(["-", "INIT", "-", "-", "Saldo Awal", "-", "Saldo", saldoAwal, 0, saldoAwal]);
+            if (activeSaldoAwal > 0) {
+                rows.push(["-", "INIT", "-", "-", "Saldo Awal", "-", "Saldo", activeSaldoAwal, 0, activeSaldoAwal]);
             }
 
             // Total Row
@@ -323,7 +376,7 @@ export default function KasList() {
             doc.setFontSize(10);
             doc.setTextColor(0);
             const summaryY = 35;
-            doc.text(`Saldo Awal: Rp ${formatPlainCurrency(saldoAwal)}`, 14, summaryY);
+            doc.text(`Saldo Awal: Rp ${formatPlainCurrency(activeSaldoAwal)}`, 14, summaryY);
             doc.text(`Total Masuk: Rp ${formatPlainCurrency(totalMasuk)}`, 80, summaryY);
             doc.text(`Total Keluar: Rp ${formatPlainCurrency(totalKeluar)}`, 150, summaryY);
             doc.text(`Saldo Akhir: Rp ${formatPlainCurrency(saldoAkhir)}`, 220, summaryY);
@@ -343,11 +396,11 @@ export default function KasList() {
             ]);
 
             // Add saldo awal row
-            if (saldoAwal > 0) {
+            if (activeSaldoAwal > 0) {
                 tableData.push([
                     "-", "INIT", "-", "-", "Saldo Awal", "-", "Saldo",
-                    formatPlainCurrency(saldoAwal), "-",
-                    formatPlainCurrency(saldoAwal),
+                    formatPlainCurrency(activeSaldoAwal), "-",
+                    formatPlainCurrency(activeSaldoAwal),
                 ]);
             }
 
@@ -460,7 +513,7 @@ export default function KasList() {
                             </div>
                             <div>
                                 <p className="text-sm text-slate-400">Saldo Awal</p>
-                                <p className="text-xl font-bold text-blue-400">{formatCurrency(saldoAwal)}</p>
+                                <p className="text-xl font-bold text-blue-400">{formatCurrency(activeSaldoAwal)}</p>
                             </div>
                         </div>
                         <button
@@ -515,7 +568,65 @@ export default function KasList() {
                 </div>
             </div>
 
-            {/* Main Table Card */}
+            {/* Account Specific Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-800/40 rounded-xl border border-slate-700/50 p-4 relative overflow-hidden group">
+                    <div className="flex justify-between items-start mb-1">
+                        <p className="text-xs font-semibold text-slate-400 tracking-wider">SALDO KAS (TUNAI)</p>
+                        <div className="p-1 px-2 rounded-md bg-emerald-500/10 text-emerald-400 text-[10px] font-bold">TUNAI</div>
+                    </div>
+                    <div className="flex items-end justify-between">
+                        <div>
+                            <div className="text-xl font-black text-slate-100">{formatCurrency(statsKas.awal + statsKas.masuk - statsKas.keluar)}</div>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] text-emerald-400">+{formatPlainCurrency(statsKas.masuk)}</span>
+                                <span className="text-[10px] text-red-400">-{formatPlainCurrency(statsKas.keluar)}</span>
+                            </div>
+                        </div>
+                        <div className="opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Wallet size={32} />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-slate-800/40 rounded-xl border border-slate-700/50 p-4 relative overflow-hidden group">
+                    <div className="flex justify-between items-start mb-1">
+                        <p className="text-xs font-semibold text-slate-400 tracking-wider">SALDO BANK (TRANSFER)</p>
+                        <div className="p-1 px-2 rounded-md bg-blue-500/10 text-blue-400 text-[10px] font-bold">TRANSFER</div>
+                    </div>
+                    <div className="flex items-end justify-between">
+                        <div>
+                            <div className="text-xl font-black text-slate-100">{formatCurrency(statsBank.awal + statsBank.masuk - statsBank.keluar)}</div>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] text-emerald-400">+{formatPlainCurrency(statsBank.masuk)}</span>
+                                <span className="text-[10px] text-red-400">-{formatPlainCurrency(statsBank.keluar)}</span>
+                            </div>
+                        </div>
+                        <div className="opacity-10 group-hover:opacity-20 transition-opacity">
+                            <TrendingUp size={32} />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-slate-800/40 rounded-xl border border-slate-700/50 p-4 relative overflow-hidden group">
+                    <div className="flex justify-between items-start mb-1">
+                        <p className="text-xs font-semibold text-slate-400 tracking-wider">SALDO E-WALLET / QRIS</p>
+                        <div className="p-1 px-2 rounded-md bg-purple-500/10 text-purple-400 text-[10px] font-bold">DIGITAL</div>
+                    </div>
+                    <div className="flex items-end justify-between">
+                        <div>
+                            <div className="text-xl font-black text-slate-100">{formatCurrency(statsEwallet.awal + statsEwallet.masuk - statsEwallet.keluar)}</div>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] text-emerald-400">+{formatPlainCurrency(statsEwallet.masuk)}</span>
+                                <span className="text-[10px] text-red-400">-{formatPlainCurrency(statsEwallet.keluar)}</span>
+                            </div>
+                        </div>
+                        <div className="opacity-10 group-hover:opacity-20 transition-opacity">
+                            <Settings size={32} />
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
                 {/* Header */}
                 <div className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -610,7 +721,7 @@ export default function KasList() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-700/50">
-                            {entriesWithBalance.length === 0 && saldoAwal === 0 ? (
+                            {entriesWithBalance.length === 0 && activeSaldoAwal === 0 ? (
                                 <tr>
                                     <td colSpan={10} className="px-5 py-8 text-center text-slate-500">
                                         Tidak ada data kas untuk periode ini
@@ -681,7 +792,7 @@ export default function KasList() {
                                     })}
 
                                     {/* Saldo Awal row at the bottom (oldest) */}
-                                    {saldoAwal > 0 && (
+                                    {activeSaldoAwal > 0 && (
                                         <tr className="bg-blue-900/10">
                                             <td className="px-4 py-3 text-slate-500">—</td>
                                             <td className="px-4 py-3 text-blue-400 font-mono text-xs">INIT</td>
@@ -694,15 +805,15 @@ export default function KasList() {
                                                     <Wallet size={12} /> Saldo
                                                 </span>
                                             </td>
-                                            <td className="px-4 py-3 text-right font-medium text-blue-400">{formatCurrency(saldoAwal)}</td>
+                                            <td className="px-4 py-3 text-right font-medium text-blue-400">{formatCurrency(activeSaldoAwal)}</td>
                                             <td className="px-4 py-3 text-right text-slate-500">-</td>
-                                            <td className="px-4 py-3 text-right font-medium text-blue-400">{formatCurrency(saldoAwal)}</td>
+                                            <td className="px-4 py-3 text-right font-medium text-blue-400">{formatCurrency(activeSaldoAwal)}</td>
                                         </tr>
                                     )}
                                 </>
                             )}
                         </tbody>
-                        {(entriesWithBalance.length > 0 || saldoAwal > 0) && (
+                        {(entriesWithBalance.length > 0 || activeSaldoAwal > 0) && (
                             <tfoot>
                                 <tr className="border-t-2 border-slate-600 bg-slate-900/50">
                                     <td colSpan={7} className="px-4 py-3 text-sm font-bold text-slate-200">

@@ -18,6 +18,7 @@ export default function TransaksiEdit() {
     const [motors, setMotors] = useState<Motor[]>([]);
     const [penyewas, setPenyewas] = useState<Penyewa[]>([]);
     const [dendaPerHari, setDendaPerHari] = useState(0);
+    const [diskonInfo, setDiskonInfo] = useState({ aktif: false, persen: 0, mulai: "", berakhir: "" });
 
     useEffect(() => {
         fetchData();
@@ -26,16 +27,26 @@ export default function TransaksiEdit() {
     const fetchData = async () => {
         setFetching(true);
         try {
-            const [m, p, result, dendaStr] = await Promise.all([
+            const [m, p, result, dendaStr, dPersen, dMulai, dBerakhir, dAktif] = await Promise.all([
                 getMotor(),
                 PenyewaService.getAll(),
                 invoke<Transaksi>("get_transaksi_by_id", { id: Number(id) }),
                 invoke<string>("get_pengaturan", { key: "denda_per_hari" }).catch(() => "0"),
+                invoke<string>("get_pengaturan", { key: "diskon_persen" }).catch(() => "0"),
+                invoke<string>("get_pengaturan", { key: "diskon_tanggal_mulai" }).catch(() => ""),
+                invoke<string>("get_pengaturan", { key: "diskon_tanggal_berakhir" }).catch(() => ""),
+                invoke<string>("get_pengaturan", { key: "diskon_aktif" }).catch(() => "0"),
             ]);
 
             setMotors(m);
             setPenyewas(p);
             setDendaPerHari(Number(dendaStr) || 0);
+            setDiskonInfo({
+                aktif: dAktif === "1",
+                persen: Number(dPersen) || 0,
+                mulai: dMulai || "",
+                berakhir: dBerakhir || "",
+            });
 
             // Map result to form data format
             const { transaksi_id, ...formData } = result;
@@ -91,6 +102,7 @@ export default function TransaksiEdit() {
                 motors={motors}
                 penyewas={penyewas}
                 dendaPerHari={dendaPerHari}
+                diskonInfo={diskonInfo}
             />
         </div>
     );

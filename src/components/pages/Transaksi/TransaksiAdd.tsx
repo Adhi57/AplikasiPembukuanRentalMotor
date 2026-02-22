@@ -16,18 +16,29 @@ export default function TransaksiAdd() {
     const [motors, setMotors] = useState<Motor[]>([]);
     const [penyewas, setPenyewas] = useState<Penyewa[]>([]);
     const [dendaPerHari, setDendaPerHari] = useState(0);
+    const [diskonInfo, setDiskonInfo] = useState({ aktif: false, persen: 0, mulai: "", berakhir: "" });
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [m, p, dendaStr] = await Promise.all([
+                const [m, p, dendaStr, dPersen, dMulai, dBerakhir, dAktif] = await Promise.all([
                     getMotor(),
                     PenyewaService.getAll(),
                     invoke<string>("get_pengaturan", { key: "denda_per_hari" }).catch(() => "0"),
+                    invoke<string>("get_pengaturan", { key: "diskon_persen" }).catch(() => "0"),
+                    invoke<string>("get_pengaturan", { key: "diskon_tanggal_mulai" }).catch(() => ""),
+                    invoke<string>("get_pengaturan", { key: "diskon_tanggal_berakhir" }).catch(() => ""),
+                    invoke<string>("get_pengaturan", { key: "diskon_aktif" }).catch(() => "0"),
                 ]);
-                setMotors(m);
+                setMotors(m.filter(motor => motor.status === 'tersedia'));
                 setPenyewas(p);
                 setDendaPerHari(Number(dendaStr) || 0);
+                setDiskonInfo({
+                    aktif: dAktif === "1",
+                    persen: Number(dPersen) || 0,
+                    mulai: dMulai || "",
+                    berakhir: dBerakhir || "",
+                });
             } catch (error) {
                 console.error("Failed to fetch data:", error);
             }
@@ -68,6 +79,7 @@ export default function TransaksiAdd() {
                     motors={motors}
                     penyewas={penyewas}
                     dendaPerHari={dendaPerHari}
+                    diskonInfo={diskonInfo}
                 />
             </div>
         </div>

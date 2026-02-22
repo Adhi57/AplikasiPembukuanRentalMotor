@@ -4,4 +4,5 @@ export interface PengeluaranRental {
     jenis: string;
     nominal: number;
     keterangan: string;
+    sumber_dana?: string;
 }

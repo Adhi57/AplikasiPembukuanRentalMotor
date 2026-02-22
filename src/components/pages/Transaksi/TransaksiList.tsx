@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Plus, Search, Image, X } from "lucide-react";
+import { Plus, Search, Image, X, Tag, FileSpreadsheet, FileText, CheckCircle, FolderOpen } from "lucide-react";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 import { Transaksi } from "../../../types/transaksi.type";
 import { Motor } from "@/types/motor.type";
@@ -26,10 +29,24 @@ export default function TransaksiList() {
     const [statusFilter, setStatusFilter] = useState("semua");
     const [loading, setLoading] = useState(true);
     const [modalImage, setModalImage] = useState<string | null>(null);
+    const [diskonInfo, setDiskonInfo] = useState<{ aktif: boolean; persen: number; mulai: string; berakhir: string } | null>(null);
+    const [toast, setToast] = useState<{ show: boolean; message: string; filePath: string; folderPath: string }>({
+        show: false,
+        message: "",
+        filePath: "",
+        folderPath: "",
+    });
 
     useEffect(() => {
         fetchData();
     }, []);
+
+    useEffect(() => {
+        if (toast.show) {
+            const timer = setTimeout(() => setToast((t) => ({ ...t, show: false })), 8000);
+            return () => clearTimeout(timer);
+        }
+    }, [toast.show]);
 
     const fetchData = async () => {
         try {
@@ -39,13 +56,31 @@ export default function TransaksiList() {
                 getMotor(),
                 PenyewaService.getAll()
             ]);
-            setTransaksi(tResult);
+            setTransaksi(tResult.sort((a, b) => b.transaksi_id - a.transaksi_id));
             setMotors(mResult);
             setPenyewas(pResult);
         } catch (err) {
             console.error("Failed to fetch data:", err);
         } finally {
             setLoading(false);
+        }
+
+        // Fetch discount settings
+        try {
+            const [dPersen, dMulai, dBerakhir, dAktif] = await Promise.all([
+                invoke<string>("get_pengaturan", { key: "diskon_persen" }).catch(() => "0"),
+                invoke<string>("get_pengaturan", { key: "diskon_tanggal_mulai" }).catch(() => ""),
+                invoke<string>("get_pengaturan", { key: "diskon_tanggal_berakhir" }).catch(() => ""),
+                invoke<string>("get_pengaturan", { key: "diskon_aktif" }).catch(() => "0"),
+            ]);
+            setDiskonInfo({
+                aktif: dAktif === "1",
+                persen: Number(dPersen) || 0,
+                mulai: dMulai || "",
+                berakhir: dBerakhir || "",
+            });
+        } catch (err) {
+            console.error("Failed to fetch discount info:", err);
         }
     };
 
@@ -57,6 +92,105 @@ export default function TransaksiList() {
             fetchData();
         } catch (err) {
             console.error("Failed to delete transaksi:", err);
+        }
+    };
+
+    const handleOpenFolder = async () => {
+        try {
+            await invoke("open_folder", { path: toast.folderPath });
+        } catch (err) {
+            console.error("Failed to open folder:", err);
+        }
+    };
+
+    // ======== EXPORT EXCEL ========
+    const exportExcel = async () => {
+        try {
+            const now = new Date();
+            const ts = `${now.toISOString().slice(0, 10)}_${now.getHours().toString().padStart(2, "0")}${now.getMinutes().toString().padStart(2, "0")}${now.getSeconds().toString().padStart(2, "0")}`;
+            const fileName = `Daftar_Transaksi_${ts}.xlsx`;
+            const rows: any[][] = [];
+            rows.push(["Laporan Daftar Transaksi"]);
+            rows.push([]);
+            rows.push(["No", "ID", "Penyewa", "Motor", "Tgl Sewa", "Rencana Kembali", "Kembali Aktual", "Terlambat", "Total Bayar", "Diskon", "Denda", "Status"]);
+
+            filteredTransaksi.forEach((t, idx) => {
+                rows.push([
+                    idx + 1,
+                    t.transaksi_id,
+                    getPenyewaName(t.penyewa_id),
+                    getMotorName(t.motor_id),
+                    t.tanggal_sewa,
+                    t.tanggal_kembali_rencana,
+                    t.tanggal_kembali_aktual || "-",
+                    t.hari_terlambat || 0,
+                    t.total_bayar,
+                    t.diskon || 0,
+                    t.denda || 0,
+                    t.status
+                ]);
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(rows);
+            ws["!cols"] = [{ wch: 5 }, { wch: 5 }, { wch: 20 }, { wch: 25 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Transaksi");
+
+            const wbOut = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+            const data = Array.from(new Uint8Array(wbOut));
+            const savedPath: string = await invoke("save_file", { fileName, data });
+            const folderPath = savedPath.substring(0, savedPath.lastIndexOf("\\"));
+
+            setToast({ show: true, message: fileName, filePath: savedPath, folderPath });
+        } catch (err) {
+            console.error("Export Excel failed:", err);
+            alert("Gagal mengekspor Excel");
+        }
+    };
+
+    // ======== EXPORT PDF ========
+    const exportPDF = async () => {
+        try {
+            const now = new Date();
+            const ts = `${now.toISOString().slice(0, 10)}_${now.getHours().toString().padStart(2, "0")}${now.getMinutes().toString().padStart(2, "0")}${now.getSeconds().toString().padStart(2, "0")}`;
+            const fileName = `Daftar_Transaksi_${ts}.pdf`;
+            const doc = new jsPDF({ orientation: "landscape" });
+
+            doc.setFontSize(16);
+            doc.text("Laporan Daftar Transaksi", 14, 20);
+            doc.setFontSize(10);
+            doc.text(`Dicetak: ${new Date().toLocaleDateString("id-ID")}`, 14, 27);
+
+            const tableRows = filteredTransaksi.map((t, idx) => [
+                idx + 1,
+                t.transaksi_id,
+                getPenyewaName(t.penyewa_id),
+                getMotorName(t.motor_id),
+                t.tanggal_sewa,
+                t.tanggal_kembali_rencana,
+                t.tanggal_kembali_aktual || "-",
+                t.total_bayar ? t.total_bayar.toLocaleString("id-ID") : "0",
+                t.diskon ? t.diskon.toLocaleString("id-ID") : "0",
+                t.status
+            ]);
+
+            autoTable(doc, {
+                startY: 32,
+                head: [["No", "ID", "Penyewa", "Motor", "Tgl Sewa", "Rencana", "Aktual", "Total", "Diskon", "Status"]],
+                body: tableRows,
+                styles: { fontSize: 8 },
+                headStyles: { fillColor: [30, 41, 59] },
+            });
+
+            const pdfOutput = doc.output("arraybuffer");
+            const data = Array.from(new Uint8Array(pdfOutput));
+            const savedPath: string = await invoke("save_file", { fileName, data });
+            const folderPath = savedPath.substring(0, savedPath.lastIndexOf("\\"));
+
+            setToast({ show: true, message: fileName, filePath: savedPath, folderPath });
+        } catch (err) {
+            console.error("Export PDF failed:", err);
+            alert("Gagal mengekspor PDF");
         }
     };
 
@@ -160,6 +294,13 @@ export default function TransaksiList() {
             render: (value: number | null) => formatCurrency(value),
         },
         {
+            header: "Diskon",
+            accessor: "diskon" as const,
+            render: (value: number | null) => value != null && value > 0 ? (
+                <span className="text-purple-400 font-semibold">{formatCurrency(value)}</span>
+            ) : "-",
+        },
+        {
             header: "Denda",
             accessor: "denda" as const,
             render: (value: number | null) => value != null && value > 0 ? (
@@ -230,13 +371,59 @@ export default function TransaksiList() {
                         />
                     </div>
 
-                    <Button
-                        label="Tambah Transaksi"
-                        icon={<Plus size={16} />}
-                        href="/transaksi/tambah"
-                    />
+                    <div className="flex items-center gap-2">
+                        <div className="flex gap-2">
+                            <button
+                                onClick={exportExcel}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-700 rounded-lg text-sm transition"
+                                title="Export Excel"
+                            >
+                                <FileSpreadsheet size={16} />
+                                <span className="hidden sm:inline">Excel</span>
+                            </button>
+                            <button
+                                onClick={exportPDF}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-700 rounded-lg text-sm transition"
+                                title="Export PDF"
+                            >
+                                <FileText size={16} />
+                                <span className="hidden sm:inline">PDF</span>
+                            </button>
+                        </div>
+                        <Button
+                            label="Tambah"
+                            icon={<Plus size={16} />}
+                            href="/transaksi/tambah"
+                        />
+                    </div>
                 </div>
             </div>
+
+            {/* Discount Info Banner */}
+            {diskonInfo && diskonInfo.aktif && diskonInfo.persen > 0 && diskonInfo.mulai && diskonInfo.berakhir && (() => {
+                const info = diskonInfo; // Local copy for type narrowing
+                const today = new Date().toISOString().split('T')[0];
+                const isActive = today >= info.mulai && today <= info.berakhir;
+                if (!isActive) return null;
+                return (
+                    <div className="mx-5 mb-3 flex items-center gap-3 p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+                        <div className="p-2 bg-purple-500/20 rounded-lg">
+                            <Tag size={18} className="text-purple-400" />
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-sm font-semibold text-purple-300">
+                                Diskon {info.persen}% Sedang Berlaku!
+                            </p>
+                            <p className="text-xs text-purple-400/70">
+                                Periode: {info.mulai} s/d {info.berakhir}
+                            </p>
+                        </div>
+                        <span className="px-2.5 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 text-xs font-bold rounded-full">
+                            AKTIF
+                        </span>
+                    </div>
+                );
+            })()}
 
             {/* Status Filter Tabs */}
             <div className="px-5 pb-3 flex gap-2 flex-wrap">
@@ -278,36 +465,66 @@ export default function TransaksiList() {
             </div>
 
             {/* Image Modal */}
-            {modalImage && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-                    onClick={() => setModalImage(null)}
-                >
+            {
+                modalImage && (
                     <div
-                        className="relative max-w-3xl max-h-[85vh] bg-slate-900 rounded-xl border border-slate-700 overflow-hidden shadow-2xl"
-                        onClick={(e) => e.stopPropagation()}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+                        onClick={() => setModalImage(null)}
                     >
-                        <div className="flex items-center justify-between p-4 border-b border-slate-700">
-                            <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
-                                <Image size={18} className="text-purple-400" /> Bukti Peminjaman
-                            </h3>
+                        <div
+                            className="relative max-w-3xl max-h-[85vh] bg-slate-900 rounded-xl border border-slate-700 overflow-hidden shadow-2xl"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+                                <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+                                    <Image size={18} className="text-purple-400" /> Bukti Peminjaman
+                                </h3>
+                                <button
+                                    onClick={() => setModalImage(null)}
+                                    className="p-1 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
+                            <div className="p-4 flex items-center justify-center">
+                                <img
+                                    src={modalImage}
+                                    alt="Bukti Peminjaman"
+                                    className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* Toast Notification */}
+            {toast.show && (
+                <div className="fixed bottom-6 right-6 z-50">
+                    <div className="bg-slate-800 border border-green-600/50 rounded-xl shadow-2xl shadow-green-900/20 p-4 flex items-start gap-3 max-w-sm">
+                        <div className="p-1.5 bg-green-500/20 rounded-lg shrink-0 mt-0.5">
+                            <CheckCircle size={18} className="text-green-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-slate-200">File berhasil disimpan!</p>
+                            <p className="text-xs text-slate-400 mt-0.5 truncate">{toast.message}</p>
                             <button
-                                onClick={() => setModalImage(null)}
-                                className="p-1 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition"
+                                onClick={handleOpenFolder}
+                                className="flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-700/50 rounded-lg text-xs transition"
                             >
-                                <X size={20} />
+                                <FolderOpen size={14} />
+                                <span>Buka Folder</span>
                             </button>
                         </div>
-                        <div className="p-4 flex items-center justify-center">
-                            <img
-                                src={modalImage}
-                                alt="Bukti Peminjaman"
-                                className="max-w-full max-h-[70vh] object-contain rounded-lg"
-                            />
-                        </div>
+                        <button
+                            onClick={() => setToast((t) => ({ ...t, show: false }))}
+                            className="text-slate-500 hover:text-slate-300 transition shrink-0"
+                        >
+                            <X size={16} />
+                        </button>
                     </div>
                 </div>
             )}
-        </div>
+        </div >
     );
 }

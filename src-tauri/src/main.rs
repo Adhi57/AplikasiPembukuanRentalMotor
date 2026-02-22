@@ -4,6 +4,7 @@
 mod commands;
 mod db;
 mod handlers;
+mod license;
 mod migrations;
 mod models;
 
@@ -31,6 +32,11 @@ fn main() {
             handlers::transaksi::update_transaksi,
             handlers::transaksi::delete_transaksi,
             handlers::transaksi::save_transaksi_image,
+            // License Commands
+            license::get_machine_id,
+            license::verify_license,
+            license::activate_license,
+            license::check_license_status,
             handlers::bukti_pelunasan::get_all_bukti_pelunasan,
             handlers::bukti_pelunasan::create_bukti_pelunasan,
             handlers::bukti_pelunasan::get_bukti_pelunasan_by_id,

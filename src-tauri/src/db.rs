@@ -186,7 +186,7 @@ pub fn delete_penyewa(conn: &Connection, id: i32) -> Result<()> {
 }
 
 pub fn get_all_transaksi(conn: &Connection) -> Result<Vec<crate::models::Transaksi>> {
-    let mut stmt = conn.prepare("SELECT transaksi_id, motor_id, penyewa_id, tanggal_sewa, tanggal_kembali_rencana, tanggal_kembali_aktual, hari_terlambat, total_bayar, status, denda, foto_bukti FROM transaksi")?;
+    let mut stmt = conn.prepare("SELECT transaksi_id, motor_id, penyewa_id, tanggal_sewa, tanggal_kembali_rencana, tanggal_kembali_aktual, hari_terlambat, total_bayar, status, denda, foto_bukti, diskon FROM transaksi")?;
     let transaksi_iter = stmt.query_map([], |row| {
         Ok(crate::models::Transaksi {
             transaksi_id: row.get(0)?,
@@ -200,6 +200,7 @@ pub fn get_all_transaksi(conn: &Connection) -> Result<Vec<crate::models::Transak
             status: row.get(8)?,
             denda: row.get(9)?,
             foto_bukti: row.get(10)?,
+            diskon: row.get(11)?,
         })
     })?;
 
@@ -214,8 +215,8 @@ pub fn create_transaksi(conn: &Connection, data: crate::models::Transaksi) -> Re
     let motor_id = data.motor_id;
 
     conn.execute(
-        "INSERT INTO transaksi (motor_id, penyewa_id, tanggal_sewa, tanggal_kembali_rencana, tanggal_kembali_aktual, hari_terlambat, total_bayar, status, denda, foto_bukti) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-        (data.motor_id, data.penyewa_id, data.tanggal_sewa, data.tanggal_kembali_rencana, data.tanggal_kembali_aktual, data.hari_terlambat, data.total_bayar, data.status, data.denda, data.foto_bukti),
+        "INSERT INTO transaksi (motor_id, penyewa_id, tanggal_sewa, tanggal_kembali_rencana, tanggal_kembali_aktual, hari_terlambat, total_bayar, status, denda, foto_bukti, diskon) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        (data.motor_id, data.penyewa_id, data.tanggal_sewa, data.tanggal_kembali_rencana, data.tanggal_kembali_aktual, data.hari_terlambat, data.total_bayar, data.status, data.denda, data.foto_bukti, data.diskon),
     )?;
 
     // Update motor status to dipinjam
@@ -228,7 +229,7 @@ pub fn create_transaksi(conn: &Connection, data: crate::models::Transaksi) -> Re
 }
 
 pub fn get_transaksi_by_id(conn: &Connection, id: i32) -> Result<crate::models::Transaksi> {
-    let mut stmt = conn.prepare("SELECT transaksi_id, motor_id, penyewa_id, tanggal_sewa, tanggal_kembali_rencana, tanggal_kembali_aktual, hari_terlambat, total_bayar, status, denda, foto_bukti FROM transaksi WHERE transaksi_id = ?1")?;
+    let mut stmt = conn.prepare("SELECT transaksi_id, motor_id, penyewa_id, tanggal_sewa, tanggal_kembali_rencana, tanggal_kembali_aktual, hari_terlambat, total_bayar, status, denda, foto_bukti, diskon FROM transaksi WHERE transaksi_id = ?1")?;
     let mut rows = stmt.query([id])?;
 
     if let Some(row) = rows.next()? {
@@ -244,6 +245,7 @@ pub fn get_transaksi_by_id(conn: &Connection, id: i32) -> Result<crate::models::
             status: row.get(8)?,
             denda: row.get(9)?,
             foto_bukti: row.get(10)?,
+            diskon: row.get(11)?,
         })
     } else {
         Err(rusqlite::Error::QueryReturnedNoRows)
@@ -259,7 +261,7 @@ pub fn update_transaksi(conn: &Connection, id: i32, data: crate::models::Transak
     let new_motor_id = data.motor_id;
     let is_kembali = data.status == "kembali";
 
-    conn.execute("UPDATE transaksi SET motor_id = ?1, penyewa_id = ?2, tanggal_sewa = ?3, tanggal_kembali_rencana = ?4, tanggal_kembali_aktual = ?5, hari_terlambat = ?6, total_bayar = ?7, status = ?8, denda = ?9, foto_bukti = ?10 WHERE transaksi_id = ?11", (data.motor_id, data.penyewa_id, data.tanggal_sewa, data.tanggal_kembali_rencana, data.tanggal_kembali_aktual, data.hari_terlambat, data.total_bayar, data.status, data.denda, data.foto_bukti, id))?;
+    conn.execute("UPDATE transaksi SET motor_id = ?1, penyewa_id = ?2, tanggal_sewa = ?3, tanggal_kembali_rencana = ?4, tanggal_kembali_aktual = ?5, hari_terlambat = ?6, total_bayar = ?7, status = ?8, denda = ?9, foto_bukti = ?10, diskon = ?11 WHERE transaksi_id = ?12", (data.motor_id, data.penyewa_id, data.tanggal_sewa, data.tanggal_kembali_rencana, data.tanggal_kembali_aktual, data.hari_terlambat, data.total_bayar, data.status, data.denda, data.foto_bukti, data.diskon, id))?;
 
     // If motor changed, reset old motor status
     if old_motor_id != new_motor_id {
@@ -396,7 +398,7 @@ pub fn get_all_pengeluaran_rental(
     conn: &Connection,
 ) -> Result<Vec<crate::models::PengeluaranRental>> {
     let mut stmt = conn.prepare(
-        "SELECT pengeluaran_id, tanggal, jenis, nominal, keterangan FROM pengeluaran_rental",
+        "SELECT pengeluaran_id, tanggal, jenis, nominal, keterangan, sumber_dana FROM pengeluaran_rental",
     )?;
     let pengeluaran_iter = stmt.query_map([], |row| {
         Ok(crate::models::PengeluaranRental {
@@ -405,6 +407,7 @@ pub fn get_all_pengeluaran_rental(
             jenis: row.get(2)?,
             nominal: row.get(3)?,
             keterangan: row.get(4)?,
+            sumber_dana: row.get(5)?,
         })
     })?;
 
@@ -419,7 +422,7 @@ pub fn create_pengeluaran_rental(
     conn: &Connection,
     data: crate::models::PengeluaranRental,
 ) -> Result<()> {
-    conn.execute("INSERT INTO pengeluaran_rental (tanggal, jenis, nominal, keterangan) VALUES (?1, ?2, ?3, ?4)", (data.tanggal, data.jenis, data.nominal, data.keterangan))?;
+    conn.execute("INSERT INTO pengeluaran_rental (tanggal, jenis, nominal, keterangan, sumber_dana) VALUES (?1, ?2, ?3, ?4, ?5)", (data.tanggal, data.jenis, data.nominal, data.keterangan, data.sumber_dana.unwrap_or("Kas".to_string())))?;
     Ok(())
 }
 
@@ -427,7 +430,7 @@ pub fn get_pengeluaran_rental_by_id(
     conn: &Connection,
     id: i32,
 ) -> Result<crate::models::PengeluaranRental> {
-    let mut stmt = conn.prepare("SELECT pengeluaran_id, tanggal, jenis, nominal, keterangan FROM pengeluaran_rental WHERE pengeluaran_id = ?1")?;
+    let mut stmt = conn.prepare("SELECT pengeluaran_id, tanggal, jenis, nominal, keterangan, sumber_dana FROM pengeluaran_rental WHERE pengeluaran_id = ?1")?;
     let mut rows = stmt.query([id])?;
 
     if let Some(row) = rows.next()? {
@@ -437,6 +440,7 @@ pub fn get_pengeluaran_rental_by_id(
             jenis: row.get(2)?,
             nominal: row.get(3)?,
             keterangan: row.get(4)?,
+            sumber_dana: row.get(5)?,
         })
     } else {
         Err(rusqlite::Error::QueryReturnedNoRows)
@@ -448,7 +452,7 @@ pub fn update_pengeluaran_rental(
     id: i32,
     data: crate::models::PengeluaranRental,
 ) -> Result<()> {
-    conn.execute("UPDATE pengeluaran_rental SET tanggal = ?1, jenis = ?2, nominal = ?3, keterangan = ?4 WHERE pengeluaran_id = ?5", (data.tanggal, data.jenis, data.nominal, data.keterangan, id))?;
+    conn.execute("UPDATE pengeluaran_rental SET tanggal = ?1, jenis = ?2, nominal = ?3, keterangan = ?4, sumber_dana = ?5 WHERE pengeluaran_id = ?6", (data.tanggal, data.jenis, data.nominal, data.keterangan, data.sumber_dana.unwrap_or("Kas".to_string()), id))?;
     Ok(())
 }
 

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { FormCard, FormGroup, Label, Input, Select } from '../../ui/Form';
 import Button from '../../ui/Button';
-import { Save, Upload, AlertTriangle, Camera } from 'lucide-react';
+import { Save, Upload, AlertTriangle, Camera, Tag } from 'lucide-react';
 import { Transaksi } from '../../../types/transaksi.type';
 import { Motor } from '../../../types/motor.type';
 import { Penyewa } from '../../../types/penyewa.type';
@@ -11,6 +11,13 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 
 export type TransaksiFormData = Omit<Transaksi, 'transaksi_id'>;
 
+interface DiskonInfo {
+    aktif: boolean;
+    persen: number;
+    mulai: string;
+    berakhir: string;
+}
+
 interface TransaksiFormProps {
     initialData?: TransaksiFormData;
     onSubmit: (data: TransaksiFormData) => void;
@@ -18,11 +25,14 @@ interface TransaksiFormProps {
     motors: Motor[];
     penyewas: Penyewa[];
     dendaPerHari: number;
+    diskonInfo?: DiskonInfo;
 }
 
-const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, isLoading, motors, penyewas, dendaPerHari }) => {
+const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, isLoading, motors, penyewas, dendaPerHari, diskonInfo }) => {
     const [preview, setPreview] = useState<string | null>(null);
     const [uploadingImage, setUploadingImage] = useState(false);
+    const [hargaNormal, setHargaNormal] = useState<number>(0);
+    const [isDiskonApplied, setIsDiskonApplied] = useState(false);
 
     const {
         register,
@@ -45,7 +55,6 @@ const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, is
     useEffect(() => {
         if (initialData) {
             reset(initialData);
-            // Set preview for existing photo
             if (initialData.foto_bukti) {
                 setPreview(convertFileSrc(initialData.foto_bukti));
             }
@@ -58,7 +67,7 @@ const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, is
     const tanggalKembaliAktual = watch('tanggal_kembali_aktual');
     const fotoBuktiPath = watch('foto_bukti');
 
-    // Auto-calculate total_bayar
+    // Auto-calculate total_bayar with discount
     useEffect(() => {
         if (motorId && tanggalSewa && tanggalKembaliRencana) {
             const start = new Date(tanggalSewa);
@@ -68,12 +77,31 @@ const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, is
 
             const motor = motors.find(m => m.motor_id === motorId);
             if (motor) {
-                setValue('total_bayar', diffDays * motor.harga_harian);
+                const normal = diffDays * motor.harga_harian;
+                setHargaNormal(normal);
+
+                let discountApplied = false;
+                if (diskonInfo && diskonInfo.aktif && diskonInfo.persen > 0 && diskonInfo.mulai && diskonInfo.berakhir) {
+                    if (tanggalSewa >= diskonInfo.mulai && tanggalSewa <= diskonInfo.berakhir) {
+                        discountApplied = true;
+                    }
+                }
+
+                setIsDiskonApplied(discountApplied);
+                if (discountApplied && diskonInfo) {
+                    const discountNominal = Math.round(normal * diskonInfo.persen / 100);
+                    const discounted = normal - discountNominal;
+                    setValue('total_bayar', discounted);
+                    setValue('diskon', discountNominal);
+                } else {
+                    setValue('total_bayar', normal);
+                    setValue('diskon', 0);
+                }
             }
         }
-    }, [motorId, tanggalSewa, tanggalKembaliRencana, motors, setValue]);
+    }, [motorId, tanggalSewa, tanggalKembaliRencana, motors, setValue, diskonInfo]);
 
-    // Auto-calculate denda when tanggal_kembali_aktual changes
+    // Auto-calculate denda
     useEffect(() => {
         if (tanggalKembaliAktual && tanggalKembaliRencana) {
             const rencana = new Date(tanggalKembaliRencana);
@@ -82,12 +110,10 @@ const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, is
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
             if (diffDays > 0) {
-                // Terlambat
                 setValue('hari_terlambat', diffDays);
                 setValue('denda', diffDays * dendaPerHari);
                 setValue('status', 'terlambat');
             } else {
-                // Tepat waktu atau lebih awal
                 setValue('hari_terlambat', 0);
                 setValue('denda', 0);
                 setValue('status', 'kembali');
@@ -95,7 +121,6 @@ const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, is
         }
     }, [tanggalKembaliAktual, tanggalKembaliRencana, dendaPerHari, setValue]);
 
-    // Handle photo upload
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -106,7 +131,6 @@ const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, is
             reader.onload = async () => {
                 const base64 = reader.result as string;
                 setPreview(base64);
-
                 try {
                     const path = await invoke<string>("save_transaksi_image", { base64 });
                     setValue('foto_bukti', path);
@@ -200,6 +224,20 @@ const TransaksiForm: React.FC<TransaksiFormProps> = ({ initialData, onSubmit, is
                             {...register('total_bayar', { valueAsNumber: true })}
                             error={errors.total_bayar?.message}
                         />
+                        {isDiskonApplied && diskonInfo && hargaNormal > 0 && (
+                            <div className="mt-2 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <Tag size={14} className="text-purple-400" />
+                                    <span className="text-xs font-semibold text-purple-400">DISKON {diskonInfo.persen}%</span>
+                                </div>
+                                <p className="text-xs text-slate-400">
+                                    <span className="line-through text-slate-500">Rp {hargaNormal.toLocaleString('id-ID')}</span>
+                                    {' → '}
+                                    <span className="text-green-400 font-semibold">Rp {Math.round(hargaNormal * (100 - diskonInfo.persen) / 100).toLocaleString('id-ID')}</span>
+                                    <span className="text-slate-500 ml-1">(hemat Rp {Math.round(hargaNormal * diskonInfo.persen / 100).toLocaleString('id-ID')})</span>
+                                </p>
+                            </div>
+                        )}
                     </FormGroup>
                 </div>
 

@@ -16,6 +16,7 @@ import {
   Clock,
   CheckCircle2,
   Ban,
+  Tag,
 } from "lucide-react";
 
 import { Motor } from "../../../types/motor.type";
@@ -33,8 +34,11 @@ export default function Dashboard() {
   const [transaksiList, setTransaksiList] = useState<Transaksi[]>([]);
   const [buktiList, setBuktiList] = useState<BuktiPelunasan[]>([]);
   const [pengeluaranList, setPengeluaranList] = useState<PengeluaranRental[]>([]);
-  const [saldoAwal, setSaldoAwal] = useState<number>(0);
+  const [saldoAwalKas, setSaldoAwalKas] = useState<number>(0);
+  const [saldoAwalBank, setSaldoAwalBank] = useState<number>(0);
+  const [saldoAwalEwallet, setSaldoAwalEwallet] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [diskonInfo, setDiskonInfo] = useState<{ aktif: boolean; persen: number; mulai: string; berakhir: string } | null>(null);
 
   useEffect(() => {
     fetchAllData();
@@ -43,24 +47,46 @@ export default function Dashboard() {
   const fetchAllData = async () => {
     try {
       setLoading(true);
-      const [m, p, t, b, pg, saldo] = await Promise.all([
+      const [m, p, t, b, pg, kas, bank, ewallet] = await Promise.all([
         getMotor(),
         PenyewaService.getAll(),
         TransaksiService.getAll(),
         invoke<BuktiPelunasan[]>("get_all_bukti_pelunasan"),
         invoke<PengeluaranRental[]>("get_all_pengeluaran_rental"),
-        invoke<string>("get_pengaturan", { key: "saldo_awal" }),
+        invoke<string>("get_pengaturan", { key: "saldo_awal_kas" }),
+        invoke<string>("get_pengaturan", { key: "saldo_awal_bank" }),
+        invoke<string>("get_pengaturan", { key: "saldo_awal_ewallet" }),
       ]);
       setMotors(m);
       setPenyewas(p);
       setTransaksiList(t);
       setBuktiList(b);
       setPengeluaranList(pg);
-      setSaldoAwal(saldo ? parseInt(saldo) || 0 : 0);
+      setSaldoAwalKas(kas ? parseInt(kas) || 0 : 0);
+      setSaldoAwalBank(bank ? parseInt(bank) || 0 : 0);
+      setSaldoAwalEwallet(ewallet ? parseInt(ewallet) || 0 : 0);
     } catch (err) {
       console.error("Failed to fetch dashboard data:", err);
     } finally {
       setLoading(false);
+    }
+
+    // Fetch discount settings
+    try {
+      const [dPersen, dMulai, dBerakhir, dAktif] = await Promise.all([
+        invoke<string>("get_pengaturan", { key: "diskon_persen" }).catch(() => "0"),
+        invoke<string>("get_pengaturan", { key: "diskon_tanggal_mulai" }).catch(() => ""),
+        invoke<string>("get_pengaturan", { key: "diskon_tanggal_berakhir" }).catch(() => ""),
+        invoke<string>("get_pengaturan", { key: "diskon_aktif" }).catch(() => "0"),
+      ]);
+      setDiskonInfo({
+        aktif: dAktif === "1",
+        persen: Number(dPersen) || 0,
+        mulai: dMulai || "",
+        berakhir: dBerakhir || "",
+      });
+    } catch (err) {
+      console.error("Failed to fetch discount info:", err);
     }
   };
 
@@ -101,9 +127,22 @@ export default function Dashboard() {
   const pengeluaranBulanIni = bulanIniPengeluaran.reduce((s, p) => s + (p.nominal || 0), 0);
 
   // Financial stats — all time
-  const totalPemasukan = buktiList.reduce((s, b) => s + b.jumlah_bayar, 0);
-  const totalPengeluaran = pengeluaranList.reduce((s, p) => s + (p.nominal || 0), 0);
-  const saldoAkhir = saldoAwal + totalPemasukan - totalPengeluaran;
+  // Financial stats — all time breakdown
+  // Calculate balances per account
+  // 1. Kas
+  const masukKas = buktiList.filter(b => b.metode_bayar === "tunai").reduce((s, b) => s + b.jumlah_bayar, 0);
+  const keluarKas = pengeluaranList.filter(p => !p.sumber_dana || p.sumber_dana === "Kas").reduce((s, p) => s + p.nominal, 0);
+  const saldoKas = saldoAwalKas + masukKas - keluarKas;
+
+  // 2. Bank
+  const masukBank = buktiList.filter(b => b.metode_bayar === "transfer").reduce((s, b) => s + b.jumlah_bayar, 0);
+  const keluarBank = pengeluaranList.filter(p => p.sumber_dana === "Bank").reduce((s, p) => s + p.nominal, 0);
+  const saldoBank = saldoAwalBank + masukBank - keluarBank;
+
+  // 3. E-Wallet
+  const masukEwallet = buktiList.filter(b => ["ewallet", "qris"].includes(b.metode_bayar)).reduce((s, b) => s + b.jumlah_bayar, 0);
+  const keluarEwallet = pengeluaranList.filter(p => p.sumber_dana === "E-Wallet").reduce((s, p) => s + p.nominal, 0);
+  const saldoEwallet = saldoAwalEwallet + masukEwallet - keluarEwallet;
 
   // Recent transactions (combined income + expenses, last 8)
   const recentEntries = [
@@ -172,8 +211,33 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Discount Info Banner */}
+      {diskonInfo && diskonInfo.aktif && diskonInfo.persen > 0 && diskonInfo.mulai && diskonInfo.berakhir && (() => {
+        const today = new Date().toISOString().split('T')[0];
+        const isActive = today >= diskonInfo.mulai && today <= diskonInfo.berakhir;
+        if (!isActive) return null;
+        return (
+          <div className="flex items-center gap-3 p-4 bg-purple-900/20 border border-purple-700/50 rounded-xl">
+            <div className="p-2.5 bg-purple-500/20 rounded-lg">
+              <Tag size={20} className="text-purple-400" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-purple-300">
+                🎉 Promo Diskon {diskonInfo.persen}% Sedang Berlaku!
+              </p>
+              <p className="text-xs text-purple-400/70">
+                Berlaku untuk penyewaan dari {diskonInfo.mulai} s/d {diskonInfo.berakhir}
+              </p>
+            </div>
+            <span className="px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 text-xs font-bold rounded-full animate-pulse">
+              PROMO
+            </span>
+          </div>
+        );
+      })()}
+
       {/* Row 1: Armada & Pelanggan Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Total Motor */}
         <button onClick={() => navigate("/motor")} className="bg-slate-800 rounded-xl border border-slate-700 p-5 hover:border-blue-500/50 transition text-left group">
           <div className="flex items-center gap-3">
@@ -234,22 +298,54 @@ export default function Dashboard() {
             )}
           </div>
         </button>
+      </div>
 
+      {/* Row 2: Saldo Accounts */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Saldo Kas */}
-        <button onClick={() => navigate("/kas")} className={`bg-slate-800 rounded-xl border p-5 transition text-left group ${saldoAkhir >= 0 ? "border-slate-700 hover:border-emerald-500/50" : "border-red-700/50 hover:border-red-500/50"}`}>
+        <div className={`bg-slate-800 rounded-xl border p-5 transition text-left ${saldoKas >= 0 ? "border-slate-700 hover:border-emerald-500/50" : "border-red-700/50 hover:border-red-500/50"}`}>
           <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-lg transition ${saldoAkhir >= 0 ? "bg-emerald-500/10 group-hover:bg-emerald-500/20" : "bg-red-500/10 group-hover:bg-red-500/20"}`}>
-              <Wallet size={22} className={saldoAkhir >= 0 ? "text-emerald-400" : "text-red-400"} />
+            <div className={`p-2.5 rounded-lg transition ${saldoKas >= 0 ? "bg-emerald-500/10" : "bg-red-500/10"}`}>
+              <Wallet size={22} className={saldoKas >= 0 ? "text-emerald-400" : "text-red-400"} />
             </div>
             <div>
-              <p className="text-sm text-slate-400">Saldo Kas</p>
-              <p className={`text-2xl font-bold ${saldoAkhir >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                {formatCurrency(saldoAkhir)}
+              <p className="text-sm text-slate-400">Saldo Kas (Tunai)</p>
+              <p className={`text-2xl font-bold ${saldoKas >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {formatCurrency(saldoKas)}
               </p>
             </div>
           </div>
-          <p className="mt-3 text-xs text-slate-500">Saldo awal + pemasukan - pengeluaran</p>
-        </button>
+        </div>
+
+        {/* Saldo Bank */}
+        <div className={`bg-slate-800 rounded-xl border p-5 transition text-left ${saldoBank >= 0 ? "border-slate-700 hover:border-blue-500/50" : "border-red-700/50 hover:border-red-500/50"}`}>
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-lg transition ${saldoBank >= 0 ? "bg-blue-500/10" : "bg-red-500/10"}`}>
+              <Wallet size={22} className={saldoBank >= 0 ? "text-blue-400" : "text-red-400"} />
+            </div>
+            <div>
+              <p className="text-sm text-slate-400">Saldo Bank (Transfer)</p>
+              <p className={`text-2xl font-bold ${saldoBank >= 0 ? "text-blue-400" : "text-red-400"}`}>
+                {formatCurrency(saldoBank)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Saldo E-Wallet */}
+        <div className={`bg-slate-800 rounded-xl border p-5 transition text-left ${saldoEwallet >= 0 ? "border-slate-700 hover:border-purple-500/50" : "border-red-700/50 hover:border-red-500/50"}`}>
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-lg transition ${saldoEwallet >= 0 ? "bg-purple-500/10" : "bg-red-500/10"}`}>
+              <Wallet size={22} className={saldoEwallet >= 0 ? "text-purple-400" : "text-red-400"} />
+            </div>
+            <div>
+              <p className="text-sm text-slate-400">Saldo E-Wallet</p>
+              <p className={`text-2xl font-bold ${saldoEwallet >= 0 ? "text-purple-400" : "text-red-400"}`}>
+                {formatCurrency(saldoEwallet)}
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Row 2: Financial Summary This Month */}

@@ -89,5 +89,23 @@ pub fn init_db() -> Result<()> {
         [],
     );
 
+    // Migration: add sumber_dana to pengeluaran_rental
+    let _ = conn.execute(
+        "ALTER TABLE pengeluaran_rental ADD COLUMN sumber_dana TEXT DEFAULT 'Kas'",
+        [],
+    );
+
+    // Migration: add keterangan to transaksi
+    let _ = conn.execute(
+        "ALTER TABLE transaksi ADD COLUMN keterangan TEXT DEFAULT ''",
+        [],
+    );
+
+    // Migration: add diskon to transaksi
+    let _ = conn.execute(
+        "ALTER TABLE transaksi ADD COLUMN diskon INTEGER DEFAULT 0",
+        [],
+    );
+
     Ok(())
 }

@@ -111,18 +111,35 @@ export default function LaporanBulanan() {
     const filteredPengeluaran = pengeluaranList.filter(p => isSameMonth(p.tanggal, selectedMonth));
 
     // Calculate Totals
-    const totalMasuk = filteredBukti.reduce((sum, b) => {
-        const trx = transaksiList.find(t => t.transaksi_id === b.transaksi_id);
-        const denda = trx?.denda || 0;
-        return sum + b.jumlah_bayar + denda;
+    const uniqueTxIdsInMonth = new Set(filteredBukti.map(b => b.transaksi_id));
+    const totalDenda = Array.from(uniqueTxIdsInMonth).reduce((sum, id) => {
+        const trx = transaksiList.find(t => t.transaksi_id === id);
+        return sum + (trx?.denda || 0);
     }, 0);
 
+    const totalMasuk = filteredBukti.reduce((sum, b) => sum + b.jumlah_bayar, 0) + totalDenda;
     const totalKeluar = filteredPengeluaran.reduce((sum, p) => sum + p.nominal, 0);
     const labaBersih = totalMasuk - totalKeluar;
+
+    // Account Breakdown for selected month
+    const statsKas = {
+        masuk: filteredBukti.filter(b => b.metode_bayar === "tunai").reduce((s, b) => s + b.jumlah_bayar, 0),
+        keluar: filteredPengeluaran.filter(p => !p.sumber_dana || p.sumber_dana === "Kas").reduce((s, p) => s + p.nominal, 0)
+    };
+    const statsBank = {
+        masuk: filteredBukti.filter(b => b.metode_bayar === "transfer").reduce((s, b) => s + b.jumlah_bayar, 0),
+        keluar: filteredPengeluaran.filter(p => p.sumber_dana === "Bank").reduce((s, p) => s + p.nominal, 0)
+    };
+    const statsEwallet = {
+        masuk: filteredBukti.filter(b => ["ewallet", "qris"].includes(b.metode_bayar)).reduce((s, b) => s + b.jumlah_bayar, 0),
+        keluar: filteredPengeluaran.filter(p => p.sumber_dana === "E-Wallet").reduce((s, p) => s + p.nominal, 0)
+    };
 
     // Daily Breakdown
     const getDailyData = () => {
         const days = new Map<string, { masuk: number; keluar: number }>();
+
+        const processedDendaTxIds = new Set<number>();
 
         // Process Income
         filteredBukti.forEach(b => {
@@ -130,7 +147,15 @@ export default function LaporanBulanan() {
             if (!days.has(date)) days.set(date, { masuk: 0, keluar: 0 });
 
             const trx = transaksiList.find(t => t.transaksi_id === b.transaksi_id);
-            const amount = b.jumlah_bayar + (trx?.denda || 0);
+            let denda = 0;
+            const trxDenda = trx?.denda || 0;
+
+            if (trx && trxDenda > 0 && !processedDendaTxIds.has(trx.transaksi_id)) {
+                denda = trxDenda;
+                processedDendaTxIds.add(trx.transaksi_id);
+            }
+
+            const amount = b.jumlah_bayar + denda;
 
             const current = days.get(date)!;
             current.masuk += amount;
@@ -173,6 +198,12 @@ export default function LaporanBulanan() {
             rows.push(["Total Pemasukan", totalMasuk]);
             rows.push(["Total Pengeluaran", totalKeluar]);
             rows.push(["Laba Bersih", labaBersih]);
+            rows.push([]);
+            rows.push(["RINCIAN PER AKUN"]);
+            rows.push(["Akun", "Pemasukan", "Pengeluaran", "Net"]);
+            rows.push(["Kas (Tunai)", statsKas.masuk, statsKas.keluar, statsKas.masuk - statsKas.keluar]);
+            rows.push(["Bank (Transfer)", statsBank.masuk, statsBank.keluar, statsBank.masuk - statsBank.keluar]);
+            rows.push(["E-Wallet", statsEwallet.masuk, statsEwallet.keluar, statsEwallet.masuk - statsEwallet.keluar]);
             rows.push([]);
 
             // Header Daily
@@ -252,10 +283,17 @@ export default function LaporanBulanan() {
 
             // Net
             doc.setTextColor(59, 130, 246); // Blue
-            doc.setFont("helvetica", "normal");
-            doc.text("Laba Bersih", 170, startY, { align: "center" });
             doc.setFont("helvetica", "bold");
             doc.text(`Rp ${formatPlainCurrency(labaBersih)}`, 170, startY + 7, { align: "center" });
+
+            // Account Rincian in PDF
+            doc.setFontSize(9);
+            doc.setTextColor(0);
+            doc.setFont("helvetica", "normal");
+            const accountY = 60;
+            doc.text(`Kas: +${formatPlainCurrency(statsKas.masuk)} / -${formatPlainCurrency(statsKas.keluar)} (Net: ${formatPlainCurrency(statsKas.masuk - statsKas.keluar)})`, 14, accountY);
+            doc.text(`Bank: +${formatPlainCurrency(statsBank.masuk)} / -${formatPlainCurrency(statsBank.keluar)} (Net: ${formatPlainCurrency(statsBank.masuk - statsBank.keluar)})`, 80, accountY);
+            doc.text(`E-Wallet: +${formatPlainCurrency(statsEwallet.masuk)} / -${formatPlainCurrency(statsEwallet.keluar)} (Net: ${formatPlainCurrency(statsEwallet.masuk - statsEwallet.keluar)})`, 150, accountY);
 
             // Reset font
             doc.setTextColor(0);
@@ -278,7 +316,7 @@ export default function LaporanBulanan() {
             ]);
 
             autoTable(doc, {
-                startY: 65,
+                startY: 70,
                 head: [["Tanggal", "Pemasukan", "Pengeluaran", "Selisih"]],
                 body: tableBody,
                 theme: 'grid',
@@ -452,6 +490,46 @@ export default function LaporanBulanan() {
                         </h3>
                         <p className="text-xs text-slate-500 mt-1">
                             {labaBersih >= 0 ? "Keuntungan periode ini" : "Kerugian periode ini"}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Account Breakdown Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-4">
+                    <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">💵 Kas (Tunai)</p>
+                    <div className="flex justify-between items-end">
+                        <div className="text-sm text-slate-500">
+                            <p>Masuk: <span className="text-emerald-500">+{formatPlainCurrency(statsKas.masuk)}</span></p>
+                            <p>Keluar: <span className="text-red-500">-{formatPlainCurrency(statsKas.keluar)}</span></p>
+                        </div>
+                        <p className={`text-lg font-bold ${statsKas.masuk - statsKas.keluar >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                            {formatCurrency(statsKas.masuk - statsKas.keluar)}
+                        </p>
+                    </div>
+                </div>
+                <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-4">
+                    <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">🏦 Bank (Transfer)</p>
+                    <div className="flex justify-between items-end">
+                        <div className="text-sm text-slate-500">
+                            <p>Masuk: <span className="text-emerald-500">+{formatPlainCurrency(statsBank.masuk)}</span></p>
+                            <p>Keluar: <span className="text-red-500">-{formatPlainCurrency(statsBank.keluar)}</span></p>
+                        </div>
+                        <p className={`text-lg font-bold ${statsBank.masuk - statsBank.keluar >= 0 ? "text-blue-400" : "text-red-400"}`}>
+                            {formatCurrency(statsBank.masuk - statsBank.keluar)}
+                        </p>
+                    </div>
+                </div>
+                <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-4">
+                    <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">📱 E-Wallet / QRIS</p>
+                    <div className="flex justify-between items-end">
+                        <div className="text-sm text-slate-500">
+                            <p>Masuk: <span className="text-emerald-500">+{formatPlainCurrency(statsEwallet.masuk)}</span></p>
+                            <p>Keluar: <span className="text-red-500">-{formatPlainCurrency(statsEwallet.keluar)}</span></p>
+                        </div>
+                        <p className={`text-lg font-bold ${statsEwallet.masuk - statsEwallet.keluar >= 0 ? "text-purple-400" : "text-red-400"}`}>
+                            {formatCurrency(statsEwallet.masuk - statsEwallet.keluar)}
                         </p>
                     </div>
                 </div>

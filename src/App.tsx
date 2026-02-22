@@ -1,5 +1,8 @@
-
 import { BrowserRouter, Routes, Route } from "react-router-dom"
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import Activation from "./components/pages/Activation/Activation";
+import { Lock } from "lucide-react";
 
 import PageWrapper from "./components/layout/PageWrapper"
 import Dashboard from "./components/pages/Dashboard/Dashboard"
@@ -24,6 +27,40 @@ import LaporanBulanan from "./components/pages/Laporan/LaporanBulanan";
 import Pengaturan from "./components/pages/Pengaturan/Pengaturan";
 
 export default function App() {
+  const [isLicensed, setIsLicensed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    checkLicense();
+  }, []);
+
+  const checkLicense = async () => {
+    try {
+      const valid = await invoke<boolean>("check_license_status");
+      setIsLicensed(valid);
+      // setIsLicensed(true); // Uncomment for debugging without backend
+    } catch (err) {
+      console.error("Failed to check license:", err);
+      setIsLicensed(false);
+    }
+  };
+
+  if (isLicensed === null) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="animate-pulse flex flex-col items-center gap-4">
+          <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center">
+            <Lock className="text-slate-600" />
+          </div>
+          <p className="text-slate-500 text-sm">Memeriksa Lisensi...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLicensed === false) {
+    return <Activation />;
+  }
+
   return (
     <BrowserRouter>
       <PageWrapper>
